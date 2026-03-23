@@ -4,6 +4,33 @@ import { useGlobalContent } from "./contexts/GlobalContentContext";
 import { EditableText } from "./components/EditableText";
 import { EditableList } from "./components/EditableList";
 import { EditModeFAB } from "./components/EditModeFAB";
+import { SyncIndicator } from "./components/SyncIndicator";
+
+const THEMES = {
+  dunas: {
+    name: "Dunas de Jurerê",
+    colors: { bg: "#F9F9F8", bgAlt: "#F1F1F0", surface: "rgba(255, 255, 255, 0.7)", surfaceSolid: "#FFFFFF", border: "rgba(226, 232, 240, 0.4)", text: "#000000", textMuted: "#666666", textDim: "#A3A3A3", accent: "#171717", highlight: "#0066FF", slate: "#0F172A" }
+  },
+  ventosul: {
+    name: "Vento Sul",
+    colors: { bg: "#FFFFFF", bgAlt: "#FAFAFA", surface: "rgba(255, 255, 255, 0.8)", surfaceSolid: "#FFFFFF", border: "rgba(0, 0, 0, 0.1)", text: "#111111", textMuted: "#888888", textDim: "#BBBBBB", accent: "#000000", highlight: "#0051FF", slate: "#1A1A1A" }
+  },
+  reserva: {
+    name: "Reserva Natural",
+    colors: { bg: "#F4F7F6", bgAlt: "#ECF1EF", surface: "rgba(255, 255, 255, 0.6)", surfaceSolid: "#FFFFFF", border: "rgba(180, 200, 190, 0.3)", text: "#0D2B1D", textMuted: "#4A6B5D", textDim: "#8DAA9D", accent: "#0A2016", highlight: "#10B981", slate: "#163D2B" }
+  },
+  sunset: {
+    name: "Sunset Gold",
+    colors: { bg: "#FAFAF9", bgAlt: "#F5F5F4", surface: "rgba(255, 255, 255, 0.7)", surfaceSolid: "#FFFFFF", border: "rgba(214, 211, 209, 0.4)", text: "#1C1917", textMuted: "#78716C", textDim: "#A8A29E", accent: "#0C0A09", highlight: "#D97706", slate: "#292524" }
+  }
+};
+
+const TYPOGRAPHIES = {
+  tecnologica: { name: "A Tecnológica", primary: '"Geist", "Inter", sans-serif', secondary: '"Geist Mono", "JetBrains Mono", monospace' },
+  narrativa: { name: "A Narrativa", primary: '"SF Pro Display", "-apple-system", sans-serif', secondary: '"New York", "Georgia", serif' },
+  contemporanea: { name: "A Contemporânea", primary: '"Montserrat", sans-serif', secondary: '"Roboto Mono", monospace' },
+  classica: { name: "A Clássica de Luxo", primary: '"Cabinet Grotesk", sans-serif', secondary: '"EB Garamond", serif' }
+};
 
 const COLORS = {
   bg: "#F9F9F8",
@@ -45,10 +72,57 @@ const Icons = {
   Book: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
 };
 
+const CustomSelect = ({ value, options, onChange, renderOption }) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <div 
+        onClick={() => setOpen(!open)}
+        style={{ padding: "6px 12px", border: "1px solid var(--theme-border)", borderRadius: 6, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: "var(--theme-surfaceSolid)", fontSize: 13, color: "var(--theme-text)", minWidth: 160, justifyContent: "space-between" }}
+      >
+        {renderOption(options.find(o => o.id === value) || options[0])}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: "var(--theme-surfaceSolid)", border: "1px solid var(--theme-border)", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", zIndex: 10, minWidth: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {options.map(opt => (
+            <div 
+              key={opt.id}
+              onClick={() => { onChange(opt.id); setOpen(false); }}
+              style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", borderBottom: "1px solid var(--theme-border)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--theme-bgAlt)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              {renderOption(opt)}
+              {value === opt.id && <svg style={{ marginLeft: "auto", minWidth: 12 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 
 export default function ServLinkBackOffice() {
   const { data, updateData, isEditMode } = useGlobalContent();
+  
+  const currentTheme = data?.branding?.theme || 'dunas';
+  const currentTypo = data?.branding?.typography || 'tecnologica';
+  const themeData = THEMES[currentTheme] || THEMES.dunas;
+  const typoData = TYPOGRAPHIES[currentTypo] || TYPOGRAPHIES.tecnologica;
+
   const [activeMain, setActiveMain] = useState("home");
   const [activeSub, setActiveSub] = useState(null);
   const [globalHover, setGlobalHover] = useState(null);
@@ -117,7 +191,7 @@ export default function ServLinkBackOffice() {
   };
 
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Montserrat:wght@400;500;600&family=Roboto+Mono:wght@400&family=EB+Garamond:wght@400;500&display=swap');
 
     :root {
       --font-ui: 'Inter', -apple-system, sans-serif;
@@ -539,35 +613,137 @@ export default function ServLinkBackOffice() {
     </motion.div>
   );
 
+  const themeOptions = Object.entries(THEMES).map(([id, t]) => ({ id, name: t.name, colors: t.colors }));
+  const fontOptions = Object.entries(TYPOGRAPHIES).map(([id, t]) => ({ id, name: t.name, primary: t.primary }));
+
+  const renderThemeOption = (opt) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ 
+        width: 14, height: 14, borderRadius: "50%", 
+        background: `linear-gradient(135deg, ${opt.colors?.highlight} 0%, ${opt.colors?.slate} 50%, ${opt.colors?.bg} 100%)`,
+        boxShadow: "0 0 0 1px rgba(0,0,0,0.1)"
+      }} />
+      <span style={{ whiteSpace: "nowrap" }}>{opt.name}</span>
+    </div>
+  );
+
+  const renderFontOption = (opt) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: opt.primary }}>
+      <span style={{ whiteSpace: "nowrap" }}>{opt.name}</span>
+    </div>
+  );
+
   const renderGrowthBranding = () => (
     <motion.div key="branding" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      {/* 1. Header */}
       <SectionTitle title="Branding Artifacts" subtitle="Assets and typography identity." />
+      
+      {/* 2. Top 3 Promo Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-        <div style={{ padding: 40, background: COLORS.surfaceSolid, borderRadius: 12, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.04em", color: COLORS.text }}>ServLink</span>
+        <div style={{ padding: 40, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: typoData.primary, transition: "all 0.3s ease" }}>
+          <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.04em", color: themeData.colors.text }}>ServLink</span>
         </div>
-        <div style={{ padding: 40, background: COLORS.slate, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.04em", color: "#FFF" }}>ServLink</span>
+        <div style={{ padding: 40, background: themeData.colors.slate, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: typoData.primary, transition: "all 0.3s ease" }}>
+          <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.04em", color: themeData.colors.surfaceSolid }}>ServLink</span>
         </div>
-        <div style={{ padding: 40, background: COLORS.surfaceSolid, borderRadius: 12, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: 40, height: 40, background: COLORS.slate, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFF", fontWeight: 600, fontSize: 18 }}>S</div>
+        <div style={{ padding: 40, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: typoData.primary, transition: "all 0.3s ease" }}>
+          <div style={{ width: 40, height: 40, background: themeData.colors.slate, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: themeData.colors.surfaceSolid, fontWeight: 600, fontSize: 18 }}>S</div>
         </div>
       </div>
-      <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-        <div style={{ padding: 24, background: COLORS.surfaceSolid, borderRadius: 12, border: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 16 }}>TYPOGRAPHY — INTER</div>
-          <div style={{ fontSize: 48, fontWeight: 300, color: COLORS.text }}>Aa</div>
-          <div style={{ fontSize: 14, color: COLORS.textMuted, marginTop: 8 }}>The quick brown fox jumps over the lazy dog.</div>
+
+      {/* 3. Bottom 2 Info Cards */}
+      <div style={{ 
+        marginTop: 24, display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16,
+        '--theme-bg': themeData.colors.bg,
+        '--theme-bgAlt': themeData.colors.bgAlt,
+        '--theme-surfaceSolid': themeData.colors.surfaceSolid,
+        '--theme-border': themeData.colors.border,
+        '--theme-text': themeData.colors.text,
+        '--theme-textMuted': themeData.colors.textMuted
+      }}>
+        
+        {/* Typography Card */}
+        <div style={{ padding: 24, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, transition: "all 0.3s ease", position: "relative", zIndex: 5 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, color: themeData.colors.textMuted, textTransform: "uppercase" }}>TYPOGRAPHY — {typoData.name}</div>
+            <div style={{ transform: "translateY(-4px)", position: "relative", zIndex: 10 }}>
+              <CustomSelect 
+                value={currentTypo} 
+                options={fontOptions} 
+                onChange={val => updateData('branding.typography', val)}
+                renderOption={renderFontOption}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 48, fontWeight: 300, color: themeData.colors.text, fontFamily: typoData.primary, lineHeight: 1 }}>Aa</div>
+          <div style={{ fontSize: 14, color: themeData.colors.textMuted, marginTop: 8, fontFamily: typoData.primary }}>The quick brown fox jumps over the lazy dog.</div>
         </div>
-        <div style={{ padding: 24, background: COLORS.surfaceSolid, borderRadius: 12, border: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 16 }}>CORE PALETTE</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {['#F9F9F8', '#FFFFFF', '#EAEAEC', '#171717', '#0F172A', '#0066FF'].map(c => (
-              <div key={c} style={{ width: 32, height: 32, borderRadius: 4, background: c, border: `1px solid ${COLORS.border}` }} title={c} />
+
+        {/* Palette Card */}
+        <div style={{ padding: 24, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", flexDirection: "column", transition: "all 0.3s ease", position: "relative", zIndex: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, color: themeData.colors.textMuted, textTransform: "uppercase" }}>CORE PALETTE</div>
+            <div style={{ transform: "translateY(-4px)", position: "relative", zIndex: 10 }}>
+              <CustomSelect 
+                value={currentTheme} 
+                options={themeOptions} 
+                onChange={val => updateData('branding.theme', val)}
+                renderOption={renderThemeOption}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: "auto", flexWrap: "wrap" }}>
+            {[themeData.colors.bg, themeData.colors.surfaceSolid, themeData.colors.border, themeData.colors.text, themeData.colors.slate, themeData.colors.highlight].map((c, i) => (
+              <div key={i} style={{ width: 32, height: 32, borderRadius: 4, background: c, border: `1px solid rgba(0,0,0,0.1)` }} title={c} />
             ))}
           </div>
         </div>
+
       </div>
+
+      {/* 4. Brand Direction */}
+      <div style={{ 
+        marginTop: 24, padding: 32, borderRadius: 16, border: `1px solid ${themeData.colors.border}`,
+        background: `linear-gradient(to bottom, ${themeData.colors.bgAlt}, ${themeData.colors.surfaceSolid})`, 
+        display: "flex", flexDirection: "column", gap: 24, transition: "all 0.3s ease",
+        fontFamily: "var(--font-ui)" 
+      }}>
+        <div style={{ fontSize: 11, color: themeData.colors.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Direção de Marca</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          
+          {/* Tom de Voz */}
+          <div style={{ padding: 24, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", flexDirection: "column", gap: 20, transition: "all 0.3s ease" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: themeData.colors.highlight, fontFamily: typoData.primary }}>Tom de Voz</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Profissional mas acessível</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Confiança sem arrogância</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Linguagem direta, sem jargões</div>
+            </div>
+          </div>
+
+          {/* Personalidade */}
+          <div style={{ padding: 24, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", flexDirection: "column", gap: 20, transition: "all 0.3s ease" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: themeData.colors.highlight, fontFamily: typoData.primary }}>Personalidade</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Confiável como um maître</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Ágil como um barista</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Preciso como um sommelier</div>
+            </div>
+          </div>
+
+          {/* Valores Visuais */}
+          <div style={{ padding: 24, background: themeData.colors.surfaceSolid, borderRadius: 12, border: `1px solid ${themeData.colors.border}`, display: "flex", flexDirection: "column", gap: 20, transition: "all 0.3s ease" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: themeData.colors.highlight, fontFamily: typoData.primary }}>Valores Visuais</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Minimalismo funcional</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Hierarquia clara</div>
+              <div style={{ fontSize: 13, color: themeData.colors.textMuted, lineHeight: 1.5, display: "flex", gap: 8 }}><span style={{ color: themeData.colors.textDim }}>→</span> Espaço para respirar</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </motion.div>
   );
 
@@ -991,7 +1167,10 @@ export default function ServLinkBackOffice() {
               <NavTab id="sprints" label="Ops & Sprints" icon={Icons.Sprints} active={activeMain === "sprints"} set={(id) => { setActiveMain(id); setActiveSub("board"); }} />
             </div>
           </div>
-          <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>PMI 2026.1</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            <SyncIndicator />
+            <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>PMI 2026.1</div>
+          </div>
         </header>
 
         {activeMain === "core" && (

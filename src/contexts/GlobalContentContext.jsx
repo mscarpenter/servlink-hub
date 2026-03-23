@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { fetchHubData, updateHubData } from "../services/api";
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -85,6 +86,10 @@ const defaultData = {
       { id: "prt5", name: "Vercel", status: "Infra" },
       { id: "prt6", name: "AWS", status: "Infra" }
     ]
+  },
+  branding: {
+    theme: "dunas",
+    typography: "tecnologica"
   }
 };
 
@@ -93,36 +98,43 @@ const GlobalContentContext = createContext();
 export const useGlobalContent = () => useContext(GlobalContentContext);
 
 export const GlobalContentProvider = ({ children }) => {
-  const [data, setData] = useState(() => {
-    const saved = localStorage.getItem("servlink_global_content");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        
-        // Enforce the default order of Home cards, regardless of what's saved in local storage
-        if (parsed.home && parsed.home.cards) {
+  const [data, setData] = useState(defaultData);
+  const [syncStatus, setSyncStatus] = useState('synced');
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setSyncStatus('saving');
+      const fetched = await fetchHubData();
+      if (mounted && fetched) {
+        if (fetched.home && fetched.home.cards) {
           const defaultOrderIds = defaultData.home.cards.map(c => c.id);
-          parsed.home.cards.sort((a, b) => defaultOrderIds.indexOf(a.id) - defaultOrderIds.indexOf(b.id));
+          fetched.home.cards.sort((a, b) => defaultOrderIds.indexOf(a.id) - defaultOrderIds.indexOf(b.id));
         }
-        
-        // Deep merge with defaultData to ensure new keys are not lost if we add them later
-        return { ...defaultData, ...parsed };
-      } catch (e) {
-        console.error("Failed to parse local storage", e);
+        setData({ ...defaultData, ...fetched });
+        setOriginalData({ ...defaultData, ...fetched });
       }
-    }
-    return defaultData;
-  });
+      if (mounted) setSyncStatus('synced');
+    };
+    load();
+    return () => mounted = false;
+  }, []);
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
-  const [originalData, setOriginalData] = useState(data);
+  const [originalData, setOriginalData] = useState(defaultData);
 
-  // Sync back to localstorage whenever data changes and user has clicked save
-  const saveChanges = () => {
-    localStorage.setItem("servlink_global_content", JSON.stringify(data));
-    setOriginalData(data);
-    setHasPendingChanges(false);
+  // Sync back to backend whenever user clicks save
+  const saveChanges = async () => {
+    setSyncStatus('saving');
+    const res = await updateHubData(data);
+    if (res.success) {
+      setOriginalData(data);
+      setHasPendingChanges(false);
+      setSyncStatus('synced');
+    } else {
+      setSyncStatus('offline');
+    }
   };
 
   const discardChanges = () => {
@@ -149,6 +161,8 @@ export const GlobalContentProvider = ({ children }) => {
   return (
     <GlobalContentContext.Provider value={{
       data,
+      syncStatus,
+      setData,
       setData,
       updateData,
       isEditMode,
