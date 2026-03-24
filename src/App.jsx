@@ -323,6 +323,44 @@ export default function ServLinkBackOffice() {
     tokenClient.requestAccessToken({ prompt: "" });
   };
 
+  // ─── Google Auth — localStorage persistence ───────────────────────────────
+  const LS_TOKEN    = "sl_g_token";
+  const LS_EXPIRY   = "sl_g_expiry";
+  const LS_USER     = "sl_g_user";
+
+  const GOOGLE_SCOPES = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/documents",
+  ].join(" ");
+
+  const saveGoogleSession = (token, expiresIn, user) => {
+    try {
+      localStorage.setItem(LS_TOKEN,  token);
+      localStorage.setItem(LS_EXPIRY, String(Date.now() + (expiresIn || 3600) * 1000));
+      localStorage.setItem(LS_USER,   JSON.stringify(user));
+    } catch (_) {}
+  };
+
+  const clearGoogleSession = () => {
+    try {
+      localStorage.removeItem(LS_TOKEN);
+      localStorage.removeItem(LS_EXPIRY);
+      localStorage.removeItem(LS_USER);
+    } catch (_) {}
+  };
+
+  const applyGoogleToken = (token, user) => {
+    calTokenRef.current   = token;
+    gmailTokenRef.current = token;
+    setGmailConnected(true);
+    setGoogleUser(user);
+  };
+
   // ─── Google Sign-In (unified: Calendar + Gmail) ───────────────────────────
   const signInWithGoogle = () => {
     if (!gsiReady || !window.google?.accounts?.oauth2) {
@@ -331,31 +369,25 @@ export default function ServLinkBackOffice() {
     }
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      scope: [
-        "openid",
-        "email",
-        "profile",
-        "https://www.googleapis.com/auth/calendar.readonly",
-        "https://www.googleapis.com/auth/gmail.send",
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/documents",
-      ].join(" "),
+      scope: GOOGLE_SCOPES,
       callback: async (response) => {
         if (response.error) { setCalError("Login cancelado: " + response.error); return; }
         const token = response.access_token;
-        // Store tokens (single token covers all Google APIs)
-        calTokenRef.current = token;
+        calTokenRef.current   = token;
         gmailTokenRef.current = token;
         setGmailConnected(true);
         // Fetch user profile
+        let user = { name: "Usuário", email: "", picture: "", initials: "G" };
         try {
           const profileResp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
             headers: { Authorization: `Bearer ${token}` }
           });
           const profile = await profileResp.json();
           const initials = (profile.given_name?.[0] || "") + (profile.family_name?.[0] || "");
-          setGoogleUser({ name: profile.name, email: profile.email, picture: profile.picture, initials: initials.toUpperCase() || "G" });
+          user = { name: profile.name, email: profile.email, picture: profile.picture, initials: initials.toUpperCase() || "G" };
         } catch (_) {}
+        setGoogleUser(user);
+        saveGoogleSession(token, response.expires_in, user);
         // Load calendar + Drive videos
         fetchCalendarEvents(token);
         fetchDriveVideos(token);
@@ -543,6 +575,47 @@ export default function ServLinkBackOffice() {
     return () => { if (document.head.contains(script)) document.head.removeChild(script); };
   }, []);
 
+  // ─── Restore Google session after page reload ─────────────────────────────
+  useEffect(() => {
+    if (!gsiReady) return;
+    try {
+      const savedToken  = localStorage.getItem(LS_TOKEN);
+      const savedExpiry = Number(localStorage.getItem(LS_EXPIRY) || 0);
+      const savedUser   = JSON.parse(localStorage.getItem(LS_USER) || "null");
+      if (!savedToken || !savedUser) return;
+
+      // Restore user info immediately (avatar shows right away)
+      setGoogleUser(savedUser);
+
+      if (savedExpiry > Date.now() + 60_000) {
+        // Token still valid — restore silently
+        applyGoogleToken(savedToken, savedUser);
+        fetchCalendarEvents(savedToken);
+        fetchDriveVideos(savedToken);
+      } else {
+        // Token expired — silent re-auth (no popup if user already consented)
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          scope: GOOGLE_SCOPES,
+          callback: async (response) => {
+            if (response.error || !response.access_token) {
+              // Silent re-auth failed — clear stored session, user signs in manually
+              clearGoogleSession();
+              setGoogleUser(null);
+              return;
+            }
+            const token = response.access_token;
+            applyGoogleToken(token, savedUser);
+            saveGoogleSession(token, response.expires_in, savedUser);
+            fetchCalendarEvents(token);
+            fetchDriveVideos(token);
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: "" });
+      }
+    } catch (_) {}
+  }, [gsiReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchCalendarEvents = async (token) => {
     setCalLoading(true);
     setCalError(null);
@@ -554,7 +627,7 @@ export default function ServLinkBackOffice() {
       const json = await resp.json();
       if (json.error) {
         const code = json.error.code;
-        if (code === 401) { setCalConnected(false); setCalError("Sessão expirada. Clique em Conectar novamente."); }
+        if (code === 401) { setCalConnected(false); clearGoogleSession(); setGoogleUser(null); setCalError("Sessão expirada. Faça login novamente."); }
         else if (code === 403) setCalError("Google Calendar API não habilitada. Ative em console.cloud.google.com → APIs & Services.");
         else setCalError(json.error.message || "Erro da API Google");
         return;
