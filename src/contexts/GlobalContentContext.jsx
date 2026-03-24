@@ -165,6 +165,10 @@ export const GlobalContentProvider = ({ children }) => {
       if (mounted && fetched) {
         if (fetched.home && fetched.home.cards) {
           const defaultOrderIds = defaultData.home.cards.map(c => c.id);
+          // Inject any default cards missing from saved data (e.g. newly added cards)
+          const existingIds = new Set(fetched.home.cards.map(c => c.id));
+          const missing = defaultData.home.cards.filter(c => !existingIds.has(c.id));
+          fetched.home.cards = [...fetched.home.cards, ...missing];
           fetched.home.cards.sort((a, b) => defaultOrderIds.indexOf(a.id) - defaultOrderIds.indexOf(b.id));
         }
         setData({ ...defaultData, ...fetched });
