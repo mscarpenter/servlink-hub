@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGlobalContent } from "../contexts/GlobalContentContext";
+import { useLanguage } from "../contexts/LanguageContext";
 
 // Simple SVG Icons
 const Icons = {
@@ -12,6 +13,7 @@ const Icons = {
 
 export const EditModeFAB = () => {
   const { isEditMode, setIsEditMode, hasPendingChanges, saveChanges, discardChanges } = useGlobalContent();
+  const { t } = useLanguage();
 
   return (
     <div style={{ position: "fixed", bottom: 40, right: 40, zIndex: 9999, display: "flex", gap: 16, alignItems: "center" }}>
@@ -28,13 +30,13 @@ export const EditModeFAB = () => {
               onClick={discardChanges}
               style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "1px solid rgba(220,0,0,0.2)", color: "#E00", borderRadius: 16, padding: "8px 16px", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "0.2s" }}
             >
-              <Icons.X /> Reverter
+              <Icons.X /> {t("edit_revert")}
             </button>
             <button
               onClick={saveChanges}
               style={{ display: "flex", alignItems: "center", gap: 6, background: "#171717", border: "none", color: "#FFF", borderRadius: 16, padding: "8px 20px", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "0.2s" }}
             >
-              <Icons.Check /> Publicar
+              <Icons.Check /> {t("edit_publish")}
             </button>
           </motion.div>
         )}
@@ -52,7 +54,7 @@ export const EditModeFAB = () => {
           display: "flex", alignItems: "center", justifyContent: "center",
           transition: "background 0.3s ease"
         }}
-        title={isEditMode ? "Modo de Edição Ativado" : "Ativar Modo de Edição Global"}
+        title={isEditMode ? t("edit_active") : t("edit_activate")}
       >
         <AnimatePresence mode="wait">
           <motion.div

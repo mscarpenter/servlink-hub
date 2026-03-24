@@ -2,14 +2,16 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGlobalContent } from '../contexts/GlobalContentContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const SyncIndicator = () => {
-  const { syncStatus } = useGlobalContent(); // Espera 'synced', 'saving', 'offline'
+  const { syncStatus } = useGlobalContent();
+  const { t } = useLanguage();
 
   const config = {
-    synced: { text: "Synced", color: "#10B981", pulse: false },
-    saving: { text: "Saving...", color: "#F59E0B", pulse: true },
-    offline: { text: "Offline", color: "#EF4444", pulse: false }
+    synced: { text: t("sync_synced"), color: "#10B981", pulse: false },
+    saving: { text: t("sync_saving"), color: "#F59E0B", pulse: true },
+    offline: { text: t("sync_offline"), color: "#EF4444", pulse: false }
   };
 
   const current = config[syncStatus] || config.synced;

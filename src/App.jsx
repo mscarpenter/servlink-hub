@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGlobalContent } from "./contexts/GlobalContentContext";
+import { useLanguage } from "./contexts/LanguageContext";
 import { EditableText } from "./components/EditableText";
 import { EditableList } from "./components/EditableList";
 import { EditModeFAB } from "./components/EditModeFAB";
 import { SyncIndicator } from "./components/SyncIndicator";
+import { supabase } from "./services/api";
 
 const THEMES = {
   dunas: {
@@ -69,7 +71,12 @@ const Icons = {
   Home: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>,
   ArrowRight: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>,
   Github: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>,
-  Book: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+  Book: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>,
+  Refresh: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>,
+  Sync: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path></svg>,
+  Check: () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>,
+  GoogleCal: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line></svg>,
+  ExternalLink: () => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
 };
 
 const CustomSelect = ({ value, options, onChange, renderOption }) => {
@@ -117,6 +124,7 @@ const CustomSelect = ({ value, options, onChange, renderOption }) => {
 
 export default function ServLinkBackOffice() {
   const { data, updateData, isEditMode } = useGlobalContent();
+  const { lang, toggleLang, t } = useLanguage();
   
   const currentTheme = data?.branding?.theme || 'dunas';
   const currentTypo = data?.branding?.typography || 'tecnologica';
@@ -134,14 +142,67 @@ export default function ServLinkBackOffice() {
   const setTasks = (newTasks) => updateData('scrum.tasks', newTasks);
   
   const [draggedTaskId, setDraggedTaskId] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const selectedTask = selectedTaskId ? (tasks.find(t => t.id === selectedTaskId) || null) : null;
+  const setSelectedTask = (t) => setSelectedTaskId(t ? t.id : null);
   const [sprintView, setSprintView] = useState("board");
-  const [noteStatus, setNoteStatus] = useState("[Rascunho Automático]");
+
+  // Filters
+  const [filterModeEu, setFilterModeEu] = useState(false);
+  const [filterSortPriority, setFilterSortPriority] = useState(false);
+  const [filterAssignee, setFilterAssignee] = useState(null);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+
+  // New Issue modal
+  const [showNewIssue, setShowNewIssue] = useState(false);
+  const emptyDraft = () => ({ title: "", desc: "", status: "To Do", priority: "Medium", points: 1, assignees: ["MC"], deadline: "", subtasks: [] });
+  const [newIssueDraft, setNewIssueDraft] = useState(emptyDraft());
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const modalDragRef = useRef(null);
+  const [newDraftSubtask, setNewDraftSubtask] = useState({ text: "", deadline: "", assignee: "MC" });
+
+  // New subtask input per task panel
+  const [newSubtaskText, setNewSubtaskText] = useState("");
+  const [noteStatus, setNoteStatus] = useState("note_status_draft");
+
+  // Assignee popover inside task panel
+  const [showAddMember, setShowAddMember] = useState(false);
+
+  // Google Sign-In (unified)
+  const [googleUser, setGoogleUser] = useState(null); // { name, email, picture, initials }
+
+  // Gmail notifications
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const gmailTokenRef = useRef(null);
+  const NOTIFY_EMAIL = import.meta.env.VITE_NOTIFY_EMAIL || "2521660@unicesusc.edu.br";
+
+  // GitHub Sync
+  const [githubSyncMap, setGithubSyncMap] = useState({});
+  const [githubSyncingAll, setGithubSyncingAll] = useState(false);
+
+  // Google Calendar
+  const [calEvents, setCalEvents] = useState([]);
+  const [calConnected, setCalConnected] = useState(false);
+  const [calLoading, setCalLoading] = useState(false);
+  const [calError, setCalError] = useState(null);
+  const [gsiReady, setGsiReady] = useState(false);
+  const calTokenRef = useRef(null);
+
+  // Google Drive — Pitch Studio video library
+  const [pitchVideos, setPitchVideos] = useState([]);
+  const [selectedPitchVideoIdx, setSelectedPitchVideoIdx] = useState(0);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveError, setDriveError] = useState(null);
+  const [videoLinkInput, setVideoLinkInput] = useState("");
+  const [videoLinkAdding, setVideoLinkAdding] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState(null); // null | "uploading" | "done" | string (error)
+  const [libraryOpen, setLibraryOpen] = useState(true);
 
   const handleSaveNote = () => {
-    setNoteStatus("Salvando...");
-    setTimeout(() => setNoteStatus("Salvo em Segurança"), 500);
-    setTimeout(() => setNoteStatus("[Rascunho Automático]"), 3000);
+    setNoteStatus("note_status_saving");
+    setTimeout(() => setNoteStatus("note_status_saved"), 500);
+    setTimeout(() => setNoteStatus("note_status_draft"), 3000);
   };
 
   const handleSendToSprints = () => {
@@ -157,8 +218,8 @@ export default function ServLinkBackOffice() {
       assignees: ["MC"],
       deadline: "TBD",
     }]);
-    setNoteStatus("✅ Task Injetada em Backlog!");
-    setTimeout(() => setNoteStatus("[Rascunho Automático]"), 3500);
+    setNoteStatus("note_status_injected");
+    setTimeout(() => setNoteStatus("note_status_draft"), 3500);
   };
 
   const handleDragStart = (e, id) => {
@@ -169,11 +230,566 @@ export default function ServLinkBackOffice() {
   const handleDrop = (e, status) => {
     e.preventDefault();
     if (!draggedTaskId) return;
-    setTasks(ts => ts.map(t => t.id === draggedTaskId ? { ...t, status } : t));
+    setTasks(tasks.map(t => t.id === draggedTaskId ? { ...t, status } : t));
     setDraggedTaskId(null);
   };
   
   const getPriorityColor = (p) => p === "High" ? COLORS.text : p === "Medium" ? COLORS.textMuted : COLORS.textDim;
+
+  // ─── Task helpers ─────────────────────────────────────────────────────────
+  const updateTask = (taskId, field, value) => {
+    if (field === "status") {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && task.status !== value) {
+        sendGmailNotification(
+          `[ServLink] ${taskId}: ${task.status} → ${value}`,
+          buildEmailHTML({ ...task, status: value }, `🔄 Status Atualizado`, task.status)
+        );
+      }
+    }
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, [field]: value } : t));
+  };
+
+  const getSubtasks = (task) => {
+    if (Array.isArray(task.subtasks)) return task.subtasks;
+    if (task.subtasks && typeof task.subtasks === "object") {
+      return Array.from({ length: task.subtasks.total || 0 }, (_, i) => ({
+        id: `st${i}`, text: `Subtask ${i + 1}`, done: i < (task.subtasks.done || 0)
+      }));
+    }
+    return [];
+  };
+
+  const toggleSubtask = (taskId, stId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const subs = getSubtasks(task).map(s => s.id === stId ? { ...s, done: !s.done } : s);
+    updateTask(taskId, "subtasks", subs);
+  };
+
+  const addSubtask = (taskId, text) => {
+    if (!text.trim()) return;
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const subs = [...getSubtasks(task), { id: `st${Date.now()}`, text: text.trim(), done: false }];
+    updateTask(taskId, "subtasks", subs);
+  };
+
+  const removeSubtask = (taskId, stId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    updateTask(taskId, "subtasks", getSubtasks(task).filter(s => s.id !== stId));
+  };
+
+  const formatDeadline = (d) => {
+    if (!d || d === "TBD") return d || "";
+    try {
+      return new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    } catch { return d; }
+  };
+
+  const STATUS_DOT = { "Backlog": COLORS.textDim, "To Do": COLORS.highlight, "In Progress": "#F59E0B", "Done": "#22C55E" };
+
+  const DRIVE_FOLDER_ID = "1GGex_T_q6t6aWYSFk5hSOiHFhUFkXJdm";
+  const rawMembers = data?.scrum?.members || [{ initials: "MC", name: "Mateus Carpenter", email: "mateus@servlink.io" }];
+  // When signed in with Google, use the Google account email/name for the first member
+  const members = rawMembers.map((m, i) =>
+    i === 0 && googleUser ? { ...m, email: googleUser.email, name: googleUser.name } : m
+  );
+
+  // ─── Gmail ───────────────────────────────────────────────────────────────
+  const connectGmail = () => {
+    if (!gsiReady || !window.google?.accounts?.oauth2) return;
+    setGmailConnecting(true);
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: "https://www.googleapis.com/auth/gmail.send",
+      callback: (response) => {
+        setGmailConnecting(false);
+        if (response.access_token) {
+          gmailTokenRef.current = response.access_token;
+          setGmailConnected(true);
+        }
+      },
+    });
+    tokenClient.requestAccessToken({ prompt: "" });
+  };
+
+  // ─── Google Sign-In (unified: Calendar + Gmail) ───────────────────────────
+  const signInWithGoogle = () => {
+    if (!gsiReady || !window.google?.accounts?.oauth2) {
+      setCalError("Google SDK ainda carregando. Aguarde e tente novamente.");
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/drive",
+      ].join(" "),
+      callback: async (response) => {
+        if (response.error) { setCalError("Login cancelado: " + response.error); return; }
+        const token = response.access_token;
+        // Store tokens (single token covers all Google APIs)
+        calTokenRef.current = token;
+        gmailTokenRef.current = token;
+        setGmailConnected(true);
+        // Fetch user profile
+        try {
+          const profileResp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const profile = await profileResp.json();
+          const initials = (profile.given_name?.[0] || "") + (profile.family_name?.[0] || "");
+          setGoogleUser({ name: profile.name, email: profile.email, picture: profile.picture, initials: initials.toUpperCase() || "G" });
+        } catch (_) {}
+        // Load calendar + Drive videos
+        fetchCalendarEvents(token);
+        fetchDriveVideos(token);
+      },
+    });
+    tokenClient.requestAccessToken({ prompt: "select_account" });
+  };
+
+  const buildEmailHTML = (task, eventTitle, previousStatus = null) => `
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding:32px;color:#1a1a1a;background:#fff;">
+  <div style="border-bottom:2px solid #000;padding-bottom:16px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:12px;font-weight:700;letter-spacing:0.1em;color:#000;text-transform:uppercase;">ServLink WorkOS</span>
+    <span style="font-size:11px;color:#999;font-family:monospace;">${new Date().toLocaleString("pt-BR")}</span>
+  </div>
+  <h1 style="font-size:22px;font-weight:700;margin:0 0 24px 0;letter-spacing:-0.02em;">${eventTitle}</h1>
+  <div style="background:#f9f9f8;border-radius:12px;padding:24px;margin-bottom:24px;border:1px solid #e2e8f0;">
+    <div style="font-family:monospace;font-size:11px;color:#999;margin-bottom:10px;">${task.id || "—"} &middot; ${task.sprint || "Sprint 01"}</div>
+    <h2 style="font-size:17px;font-weight:600;margin:0 0 10px 0;">${task.title}</h2>
+    ${task.desc ? `<p style="font-size:13px;color:#555;margin:0 0 16px 0;line-height:1.6;">${task.desc}</p>` : ""}
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      ${previousStatus ? `<tr><td style="padding:5px 0;color:#888;width:130px;">Status anterior</td><td style="color:#aaa;text-decoration:line-through;">${previousStatus}</td></tr>` : ""}
+      <tr><td style="padding:5px 0;color:#666;width:130px;">Status</td><td style="font-weight:600;">${task.status}</td></tr>
+      <tr><td style="padding:5px 0;color:#666;">Prioridade</td><td>${task.priority}</td></tr>
+      <tr><td style="padding:5px 0;color:#666;">Responsável</td><td>${(task.assignees || []).map(a => { const m = rawMembers.find(x => x.initials === a); const email = (googleUser && a === rawMembers[0]?.initials) ? googleUser.email : (m ? m.email : ""); return m ? (m.name + " <" + email + ">") : a; }).join(", ") || "—"}</td></tr>
+      <tr><td style="padding:5px 0;color:#666;">Estimativa</td><td style="font-family:monospace;">${task.points || 1} pts</td></tr>
+      ${task.deadline ? `<tr><td style="padding:5px 0;color:#666;">Due Date</td><td>${task.deadline}</td></tr>` : ""}
+    </table>
+  </div>
+  <p style="font-size:11px;color:#bbb;margin:0;border-top:1px solid #f0f0f0;padding-top:16px;">Notificação automática &mdash; ServLink WorkOS &middot; PMI 2026</p>
+</body></html>`;
+
+  const sendGmailNotification = async (subject, htmlBody) => {
+    if (!gmailTokenRef.current) return;
+    try {
+      // RFC 2822 message — UTF-8 safe encoding
+      const encode = (s) => btoa(unescape(encodeURIComponent(s)));
+      const encSubject = `=?utf-8?B?${encode(subject)}?=`;
+      const rawLines = [
+        `To: ${NOTIFY_EMAIL}`,
+        `From: me`,
+        `Subject: ${encSubject}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=UTF-8`,
+        `Content-Transfer-Encoding: base64`,
+        ``,
+        encode(htmlBody),
+      ].join("\r\n");
+      const raw = btoa(rawLines).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const resp = await fetch("https://www.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${gmailTokenRef.current}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ raw }),
+      });
+      if (resp.status === 401) { gmailTokenRef.current = null; setGmailConnected(false); }
+    } catch (err) {
+      console.warn("Gmail notification:", err.message);
+    }
+  };
+
+  const createNewIssue = () => {
+    if (!newIssueDraft.title.trim()) return;
+    const newId = "SL-" + String(tasks.length + 1).padStart(2, "0");
+    const newTask = { ...newIssueDraft, id: newId, sprint: data.scrum.sprintTitle?.split(":")[0] || "Sprint 01" };
+    setTasks([...tasks, newTask]);
+    sendGmailNotification(
+      `[ServLink] Nova Issue: ${newTask.title}`,
+      buildEmailHTML(newTask, "✅ Nova Issue Criada")
+    );
+    setNewIssueDraft(emptyDraft());
+    setShowNewIssue(false);
+  };
+
+  // Filtered/sorted tasks for board & list
+  let visibleTasks = tasks;
+  if (filterModeEu) visibleTasks = visibleTasks.filter(t => t.assignees?.includes("MC"));
+  if (filterAssignee) visibleTasks = visibleTasks.filter(t => t.assignees?.includes(filterAssignee));
+  if (filterSortPriority) {
+    const order = { High: 0, Medium: 1, Low: 2 };
+    visibleTasks = [...visibleTasks].sort((a, b) => (order[a.priority] ?? 2) - (order[b.priority] ?? 2));
+  }
+
+  // ─── GitHub Sync ─────────────────────────────────────────────────────────
+  const buildIssueBody = (task) => [
+    `## ${task.id} — ${task.title}`,
+    "",
+    `| Campo | Valor |`,
+    `|-------|-------|`,
+    `| **Sprint** | ${task.sprint || "—"} |`,
+    `| **Status** | ${task.status || "—"} |`,
+    `| **Priority** | ${task.priority || "—"} |`,
+    `| **Points** | ${task.points ?? "—"} |`,
+    `| **Due Date** | ${task.deadline || "—"} |`,
+    `| **Assignees** | ${(task.assignees || []).join(", ") || "—"} |`,
+    "",
+    task.desc ? `### Descrição\n${task.desc}` : "",
+    "",
+    "---",
+    "*Sincronizado via ServLink WorkOS*",
+  ].join("\n");
+
+  const syncTaskToGitHub = async (task) => {
+    setGithubSyncMap(prev => ({ ...prev, [task.id]: "syncing" }));
+    const devPat = import.meta.env.VITE_GITHUB_PAT;
+    try {
+      if (devPat) {
+        // Dev mode: direct GitHub API call (PAT stays in .env, never in bundle for prod)
+        const repo = "mscarpenter/servlink-hub";
+        const issueTitle = `[${task.id}] ${task.title}`;
+        // Check if issue already exists
+        const searchResp = await fetch(
+          `https://api.github.com/search/issues?q=${encodeURIComponent(`repo:${repo} "${issueTitle}" in:title is:issue`)}&per_page=1`,
+          { headers: { Authorization: `token ${devPat}`, Accept: "application/vnd.github.v3+json" } }
+        );
+        const searchData = await searchResp.json();
+        const existing = searchData.items?.[0];
+        if (existing) {
+          await fetch(`https://api.github.com/repos/${repo}/issues/${existing.number}`, {
+            method: "PATCH",
+            headers: { Authorization: `token ${devPat}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" },
+            body: JSON.stringify({ body: buildIssueBody(task), state: task.status === "Done" ? "closed" : "open" }),
+          });
+        } else {
+          const createResp = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+            method: "POST",
+            headers: { Authorization: `token ${devPat}`, Accept: "application/vnd.github.v3+json", "Content-Type": "application/json" },
+            body: JSON.stringify({ title: issueTitle, body: buildIssueBody(task) }),
+          });
+          if (!createResp.ok) {
+            const err = await createResp.json();
+            throw new Error(err.message || `HTTP ${createResp.status}`);
+          }
+        }
+      } else if (supabase) {
+        // Production: Supabase Edge Function (PAT hidden as secret)
+        const { data: resp, error } = await supabase.functions.invoke("github-sync", {
+          body: { task, repo: "mscarpenter/servlink-hub" },
+        });
+        if (error || !resp?.success) throw new Error(error?.message || resp?.error || "Edge function failed");
+      } else {
+        throw new Error("Configure VITE_GITHUB_PAT no .env");
+      }
+      setGithubSyncMap(prev => ({ ...prev, [task.id]: "synced" }));
+      setTimeout(() => setGithubSyncMap(prev => ({ ...prev, [task.id]: "idle" })), 4000);
+    } catch (err) {
+      console.error("GitHub sync:", err.message);
+      setGithubSyncMap(prev => ({ ...prev, [task.id]: "error" }));
+      setTimeout(() => setGithubSyncMap(prev => ({ ...prev, [task.id]: "idle" })), 4000);
+    }
+  };
+
+  const syncAllToGitHub = async () => {
+    if (githubSyncingAll) return;
+    setGithubSyncingAll(true);
+    for (const task of tasks) {
+      await syncTaskToGitHub(task);
+    }
+    setGithubSyncingAll(false);
+  };
+
+  // ─── Google Calendar ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId || !clientId.includes(".apps.googleusercontent.com")) return;
+    // Already loaded (hot reload)
+    if (window.google?.accounts?.oauth2) { setGsiReady(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setGsiReady(true);
+    script.onerror = () => setCalError("Falha ao carregar Google SDK. Verifique sua conexão.");
+    document.head.appendChild(script);
+    return () => { if (document.head.contains(script)) document.head.removeChild(script); };
+  }, []);
+
+  const fetchCalendarEvents = async (token) => {
+    setCalLoading(true);
+    setCalError(null);
+    try {
+      const now = new Date().toISOString();
+      const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?orderBy=startTime&singleEvents=true&timeMin=${now}&timeMax=${weekLater}&maxResults=6`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token || calTokenRef.current}` } });
+      const json = await resp.json();
+      if (json.error) {
+        const code = json.error.code;
+        if (code === 401) { setCalConnected(false); setCalError("Sessão expirada. Clique em Conectar novamente."); }
+        else if (code === 403) setCalError("Google Calendar API não habilitada. Ative em console.cloud.google.com → APIs & Services.");
+        else setCalError(json.error.message || "Erro da API Google");
+        return;
+      }
+      setCalEvents((json.items || []).filter(e => e.status !== "cancelled"));
+      setCalConnected(true);
+    } catch (err) {
+      setCalError("Erro de rede: " + err.message);
+    } finally {
+      setCalLoading(false);
+    }
+  };
+
+  const connectGoogleCalendar = () => {
+    setCalError(null);
+    if (!gsiReady || !window.google?.accounts?.oauth2) {
+      setCalError("Google SDK ainda carregando. Aguarde alguns segundos e tente novamente.");
+      return;
+    }
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      callback: (response) => {
+        if (response.error) { setCalError("OAuth cancelado ou negado: " + response.error); return; }
+        if (response.access_token) {
+          calTokenRef.current = response.access_token;
+          fetchCalendarEvents(response.access_token);
+        }
+      },
+    });
+    tokenClient.requestAccessToken({ prompt: "" });
+  };
+
+  const formatCalTime = (event) => {
+    if (!event.start) return "";
+    const start = new Date(event.start.dateTime || event.start.date);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const evDay = new Date(start); evDay.setHours(0,0,0,0);
+    const diff = Math.round((evDay - today) / 86400000);
+    const timeStr = event.start.dateTime
+      ? start.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const days = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+    if (diff === 0) return `Hoje${timeStr ? `, ${timeStr}h` : ""}`;
+    if (diff === 1) return `Amanhã${timeStr ? `, ${timeStr}h` : ""}`;
+    if (diff < 7) return `${days[start.getDay()]}${timeStr ? `, ${timeStr}h` : ""}`;
+    return start.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  };
+
+  const getMeetLink = (event) => {
+    return event.hangoutLink
+      || event.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri
+      || null;
+  };
+
+  // ─── Google Drive video library ──────────────────────────────────────────
+  const fetchDriveVideos = async (token) => {
+    const tok = token || calTokenRef.current;
+    if (!tok) return;
+    setDriveLoading(true);
+    setDriveError(null);
+    try {
+      // Fetch ALL files in folder: real videos AND our .url reference files
+      const q = encodeURIComponent(`'${DRIVE_FOLDER_ID}' in parents and trashed=false`);
+      const fields = encodeURIComponent("files(id,name,mimeType,thumbnailLink,createdTime,size,description)");
+      const resp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&orderBy=createdTime+desc&pageSize=50`,
+        { headers: { Authorization: `Bearer ${tok}` } }
+      );
+      const json = await resp.json();
+      if (json.error) { setDriveError(json.error.message); return; }
+
+      const videos = (json.files || []).flatMap(f => {
+        if (f.mimeType && f.mimeType.includes("video")) {
+          // Real video file in Drive
+          return [{
+            id: f.id, name: f.name, type: "drive", driveId: f.id,
+            thumbnailLink: f.thumbnailLink,
+            embedUrl: `https://drive.google.com/file/d/${f.id}/preview`,
+            createdTime: f.createdTime,
+          }];
+        }
+        // .url reference file: YouTube URL stored in description field
+        if (f.name && f.name.endsWith(".url") && f.description) {
+          const ytId = extractYouTubeId(f.description);
+          if (ytId) {
+            return [{
+              id: f.id,
+              name: f.description.length < 60 ? f.description : "YouTube — " + ytId,
+              type: "youtube",
+              embedUrl: `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`,
+              thumbnailLink: `https://img.youtube.com/vi/${ytId}/mqdefault.jpg`,
+              createdTime: f.createdTime,
+            }];
+          }
+          // Generic URL file (non-YouTube external)
+          const url = f.description;
+          return [{
+            id: f.id, name: f.name.replace(".url", ""), type: "external",
+            embedUrl: url, thumbnailLink: null, createdTime: f.createdTime,
+          }];
+        }
+        return []; // skip other file types
+      });
+
+      setPitchVideos(videos);
+      if (videos.length > 0) setSelectedPitchVideoIdx(0);
+    } catch (err) {
+      setDriveError("Erro de rede: " + err.message);
+    } finally {
+      setDriveLoading(false);
+    }
+  };
+
+  const extractDriveFileId = (url) => {
+    const m = url.match(/\/file\/d\/([^\/\?]+)/) || url.match(/id=([^&\s]+)/);
+    return m ? m[1] : null;
+  };
+
+  const extractYouTubeId = (url) => {
+    const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+    return m ? m[1] : null;
+  };
+
+  // Save a reference file (.url) to Drive — URL stored in description for easy retrieval
+  const saveRefToDrive = async (url, fileName) => {
+    const content = `[InternetShortcut]\nURL=${url}`;
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify({
+      name: fileName,
+      parents: [DRIVE_FOLDER_ID],
+      mimeType: "text/plain",
+      description: url, // key: URL stored here so fetchDriveVideos can reconstruct it
+    })], { type: "application/json" }));
+    form.append("file", new Blob([content], { type: "text/plain" }), fileName);
+    const resp = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+      { method: "POST", headers: { Authorization: `Bearer ${calTokenRef.current}` }, body: form }
+    );
+    return resp.json();
+  };
+
+  // Upload a blob (video file) to the Drive folder
+  const uploadFileToDrive = async (blob, name) => {
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify({
+      name, parents: [DRIVE_FOLDER_ID], mimeType: blob.type || "video/mp4",
+    })], { type: "application/json" }));
+    form.append("file", blob, name);
+    const resp = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,thumbnailLink",
+      { method: "POST", headers: { Authorization: `Bearer ${calTokenRef.current}` }, body: form }
+    );
+    return resp.json();
+  };
+
+  const addVideoLink = async () => {
+    if (!videoLinkInput.trim()) return;
+    const url = videoLinkInput.trim();
+    setVideoLinkAdding(true);
+    setUploadStatus("uploading");
+    setDriveError(null);
+
+    try {
+      // ── YouTube URL ──────────────────────────────────────────────────────
+      const ytId = extractYouTubeId(url);
+      if (ytId) {
+        // Optimistically add to library immediately
+        const newVideo = {
+          id: "yt_" + ytId, name: url, type: "youtube",
+          embedUrl: `https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`,
+          thumbnailLink: `https://img.youtube.com/vi/${ytId}/mqdefault.jpg`,
+        };
+        setPitchVideos(prev => [newVideo, ...prev]);
+        setSelectedPitchVideoIdx(0);
+        setVideoLinkInput("");
+        // Save .url reference to Drive so it persists and survives page reload
+        if (calTokenRef.current) {
+          await saveRefToDrive(url, `youtube_${ytId}.url`);
+          setUploadStatus("done");
+          // Refresh from Drive to get the canonical entry
+          await fetchDriveVideos();
+        } else {
+          setUploadStatus("done");
+        }
+        setTimeout(() => setUploadStatus(null), 2500);
+        return;
+      }
+
+      // ── Google Drive share link ──────────────────────────────────────────
+      const driveId = extractDriveFileId(url);
+      if (driveId && calTokenRef.current) {
+        const copyResp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${driveId}/copy`,
+          { method: "POST", headers: { Authorization: `Bearer ${calTokenRef.current}`, "Content-Type": "application/json" }, body: JSON.stringify({ parents: [DRIVE_FOLDER_ID] }) }
+        );
+        if (copyResp.ok) {
+          setVideoLinkInput("");
+          await fetchDriveVideos();
+          setUploadStatus("done");
+        } else {
+          const err = await copyResp.json();
+          setUploadStatus(err.error?.message || "Erro ao copiar do Drive");
+        }
+        setTimeout(() => setUploadStatus(null), 2500);
+        return;
+      }
+
+      // ── Direct video URL (.mp4, .webm, etc.) ────────────────────────────
+      // Try to fetch the file. If CORS allows, upload binary to Drive.
+      // If CORS blocks, save a .url reference so at least it persists.
+      if (calTokenRef.current) {
+        let blob = null;
+        try {
+          const r = await fetch(url);
+          if (r.ok && r.headers.get("content-type")?.includes("video")) blob = await r.blob();
+        } catch (_) { /* CORS blocked */ }
+
+        if (blob) {
+          const fileName = url.split("?")[0].split("/").pop() || "video.mp4";
+          const result = await uploadFileToDrive(blob, fileName);
+          if (result.id) {
+            setVideoLinkInput("");
+            await fetchDriveVideos();
+            setUploadStatus("done");
+          } else {
+            setUploadStatus(result.error?.message || "Erro no upload");
+          }
+        } else {
+          // CORS blocked binary download — save as .url reference (still playable as embed)
+          const fileName = (url.split("?")[0].split("/").pop() || "video") + ".url";
+          await saveRefToDrive(url, fileName);
+          setVideoLinkInput("");
+          await fetchDriveVideos();
+          setUploadStatus("done");
+        }
+      } else {
+        // Not signed in — add locally only
+        setPitchVideos(prev => [{
+          id: "ext_" + Math.random().toString(36).substr(2, 6),
+          name: url.split("?")[0].split("/").pop() || "Vídeo",
+          type: "external", embedUrl: url, thumbnailLink: null,
+        }, ...prev]);
+        setSelectedPitchVideoIdx(0);
+        setVideoLinkInput("");
+        setUploadStatus("done");
+      }
+      setTimeout(() => setUploadStatus(null), 2500);
+    } catch (err) {
+      setUploadStatus("Erro: " + err.message);
+      setTimeout(() => setUploadStatus(null), 5000);
+    } finally {
+      setVideoLinkAdding(false);
+    }
+  };
 
   // States for ROI Calculator
   const [roiNoShow, setRoiNoShow] = useState(350);
@@ -243,6 +859,9 @@ export default function ServLinkBackOffice() {
     .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
     .status-ok { background: #22C55E; box-shadow: 0 0 8px #22C55E88; }
     .status-alert { background: #EAB308; }
+
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    ::-webkit-scrollbar { width: 0; height: 0; }
     
     input[type=range] {
       -webkit-appearance: none; width: 100%; background: transparent;
@@ -465,8 +1084,8 @@ export default function ServLinkBackOffice() {
         />
 
         <div style={{ marginTop: 32, paddingTop: 24, borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13, color: noteStatus.includes("✅") ? "#22C55E" : COLORS.textDim, fontFamily: "var(--font-mono)", transition: "0.2s" }}>
-            {noteStatus}
+          <div style={{ fontSize: 13, color: noteStatus === "note_status_injected" ? "#22C55E" : COLORS.textDim, fontFamily: "var(--font-mono)", transition: "0.2s" }}>
+            {t(noteStatus)}
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <button 
@@ -485,15 +1104,15 @@ export default function ServLinkBackOffice() {
               onMouseEnter={e => { e.currentTarget.style.color = COLORS.text; }}
               onMouseLeave={e => { e.currentTarget.style.color = COLORS.textMuted; }}
             >
-              <Icons.Save /> Salvar Draft
+              <Icons.Save /> {t("note_save")}
             </button>
-            <button 
+            <button
               onClick={handleSendToSprints}
               style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", background: COLORS.text, color: "#fff", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all 0.2s ease", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }}
               onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
             >
-              <Icons.Send /> Gerar Task
+              <Icons.Send /> {t("note_send_sprint")}
             </button>
           </div>
         </div>
@@ -553,32 +1172,207 @@ export default function ServLinkBackOffice() {
     </motion.div>
   );
 
-  const renderCorePitch = () => (
-    <motion.div key="pitch" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ display: "grid", gridTemplateColumns: "350px 1fr", gap: 32, height: "calc(100vh - 240px)" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, overflowY: "auto", paddingRight: 16 }}>
-        <div style={{ marginBottom: 32 }}>
-          <EditableText path="pitch.title" as="h2" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, margin: 0, marginBottom: 4 }} />
-          <EditableText path="pitch.subtitle" as="p" style={{ fontSize: 13, color: COLORS.textMuted, margin: 0 }} />
-        </div>
-        <EditableList
-          listPath="pitch.acts"
-          renderItem={(s, i) => (
-            <div key={s.id || i} style={{ padding: 16, background: COLORS.surfaceSolid, border: `1px solid ${COLORS.border}`, borderRadius: 8, flex: 1, display: "flex", flexDirection: "column" }}>
+  const renderCorePitch = () => {
+    const currentVideo = pitchVideos[selectedPitchVideoIdx] || null;
+    const hasPrev = selectedPitchVideoIdx > 0;
+    const hasNext = selectedPitchVideoIdx < pitchVideos.length - 1;
+    const GlassBtn = ({ onClick, children, title, style = {} }) => (
+      <button onClick={onClick} title={title} style={{
+        background: "rgba(15,15,25,0.55)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "rgba(255,255,255,0.75)",
+        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.15s", ...style
+      }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(15,15,25,0.55)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+      >{children}</button>
+    );
+    return (
+      <motion.div key="pitch" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24, height: "calc(100vh - 240px)" }}>
+
+        {/* ── Left: Script ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", paddingRight: 6 }}>
+          <div style={{ marginBottom: 20 }}>
+            <EditableText path="pitch.title" as="h2" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, margin: 0, marginBottom: 4 }} />
+            <EditableText path="pitch.subtitle" as="p" style={{ fontSize: 12, color: COLORS.textMuted, margin: 0 }} />
+          </div>
+          <EditableList listPath="pitch.acts" renderItem={(s, i) => (
+            <div key={s.id || i} style={{ padding: 14, background: COLORS.surfaceSolid, border: `1px solid ${COLORS.border}`, borderRadius: 10, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: COLORS.highlight, marginBottom: 4 }}>ACT <EditableText path={`pitch.acts.${i}.act`} /></div>
               <EditableText path={`pitch.acts.${i}.title`} style={{ fontSize: 13, fontWeight: 500, color: COLORS.text, marginBottom: 4 }} />
               <EditableText path={`pitch.acts.${i}.text`} as="div" style={{ fontSize: 12, color: COLORS.textMuted, lineHeight: 1.5 }} />
             </div>
+          )} />
+        </div>
+
+        {/* ── Right: Video Player + Library ── */}
+        <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "#06080F", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+
+          {/* ── Video ── */}
+          <div style={{ position: "absolute", inset: 0 }}>
+            {!currentVideo ? (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.45)", marginBottom: 4 }}>
+                    {!googleUser ? "Pitch Studio" : driveLoading ? t("library_syncing") : t("library_empty")}
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
+                    {!googleUser ? t("library_login_hint") : isEditMode ? t("library_add_edit_hint") : t("library_add_noauth_hint")}
+                  </div>
+                </div>
+              </div>
+            ) : currentVideo.type === "external" ? (
+              <video key={currentVideo.id} src={currentVideo.embedUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            ) : (
+              <iframe key={currentVideo.id} src={currentVideo.embedUrl} allow="autoplay; fullscreen" allowFullScreen style={{ width: "100%", height: "100%", border: "none" }} />
+            )}
+          </div>
+
+          {/* ── Top chrome bar (always visible, glass) ── */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 10, background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%)", pointerEvents: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+              <div style={{ display: "flex", gap: 5 }}>
+                {["#FF5F57","#FFBD2E","#28C840"].map(c => <div key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c, opacity: 0.85 }} />)}
+              </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)", letterSpacing: "0.06em", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {currentVideo ? currentVideo.name : "PITCH_STUDIO"}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, pointerEvents: "auto" }}>
+              {currentVideo?.type === "drive" && (
+                <a href={"https://drive.google.com/file/d/" + currentVideo.driveId + "/view"} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "rgba(255,255,255,0.35)", textDecoration: "none" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.75)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}
+                ><Icons.ExternalLink /> Drive</a>
+              )}
+              {pitchVideos.length > 0 && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{selectedPitchVideoIdx + 1}/{pitchVideos.length}</span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Prev / Next arrows (overlay, glass) ── */}
+          {hasPrev && (
+            <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 10 }}>
+              <GlassBtn onClick={() => setSelectedPitchVideoIdx(i => i - 1)} title="Anterior" style={{ width: 36, height: 36, borderRadius: 10 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </GlassBtn>
+            </div>
           )}
-        />
-      </div>
-      <div style={{ background: COLORS.slate, borderRadius: 12, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-        <div style={{ position: "absolute", top: 16, left: 16, fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)" }}>REFERENCE_PLAYER.mov</div>
-        <button style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFF", border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer", transition: "transform 0.2s" }} onMouseEnter={e => e.currentTarget.style.transform="scale(1.05)"} onMouseLeave={e => e.currentTarget.style.transform="scale(1)"}>
-          <Icons.Play />
-        </button>
-      </div>
-    </motion.div>
-  );
+          {hasNext && (
+            <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 10 }}>
+              <GlassBtn onClick={() => setSelectedPitchVideoIdx(i => i + 1)} title="Próximo" style={{ width: 36, height: 36, borderRadius: 10 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </GlassBtn>
+            </div>
+          )}
+
+          {/* ── Collapsible bottom library ── */}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 10 }}>
+
+            {/* Toggle pill */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: libraryOpen ? 0 : 8 }}>
+              <button onClick={() => setLibraryOpen(v => !v)} style={{
+                background: "rgba(10,12,20,0.7)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+                border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px 8px 0 0", padding: "4px 16px",
+                cursor: "pointer", color: "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", gap: 4, fontSize: 10, transition: "0.2s"
+              }}
+                onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.75)"}
+                onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.4)"}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transition: "transform 0.2s", transform: libraryOpen ? "rotate(0deg)" : "rotate(180deg)" }}><polyline points="18 15 12 9 6 15"/></svg>
+                <span style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>LIBRARY</span>
+                {pitchVideos.length > 0 && <span style={{ background: "rgba(255,255,255,0.12)", borderRadius: 4, padding: "1px 5px" }}>{pitchVideos.length}</span>}
+              </button>
+            </div>
+
+            {/* Library panel */}
+            {libraryOpen && (
+              <div style={{ background: "rgba(6,8,15,0.88)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+
+                {/* Edit-mode URL input */}
+                {isEditMode && (
+                  <div style={{ padding: "10px 14px 8px", display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      value={videoLinkInput}
+                      onChange={e => setVideoLinkInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && addVideoLink()}
+                      placeholder={t("library_placeholder")}
+                      style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "7px 11px", fontSize: 12, color: "rgba(255,255,255,0.75)", fontFamily: "var(--font-mono)", outline: "none" }}
+                      onFocus={e => e.target.style.borderColor = "rgba(255,255,255,0.28)"}
+                      onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
+                    />
+                    <GlassBtn onClick={addVideoLink} title="Salvar no Drive" style={{ padding: "7px 13px", gap: 5, fontSize: 11, fontWeight: 600, opacity: videoLinkAdding ? 0.5 : 1, borderRadius: 7, pointerEvents: videoLinkAdding ? "none" : "auto", background: videoLinkInput.trim() ? "rgba(0,102,255,0.35)" : undefined }}>
+                      {videoLinkAdding
+                        ? <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> {t("library_saving")}</>
+                        : <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> {t("library_confirm")}</>
+                      }
+                    </GlassBtn>
+                    <GlassBtn onClick={() => fetchDriveVideos()} title="Recarregar" style={{ width: 32, height: 32, borderRadius: 7 }}>
+                      <Icons.Refresh />
+                    </GlassBtn>
+                  </div>
+                )}
+
+                {/* Status feedback */}
+                {uploadStatus && (
+                  <div style={{ padding: "3px 14px 6px", fontSize: 10, fontFamily: "var(--font-mono)", color: uploadStatus === "done" ? "#28C840" : uploadStatus === "uploading" ? COLORS.highlight : "#FF5F57" }}>
+                    {uploadStatus === "done" ? t("library_saved") : uploadStatus === "uploading" ? t("upload_sending") : uploadStatus}
+                  </div>
+                )}
+
+                {/* Carousel */}
+                <div style={{ display: "flex", gap: 8, padding: isEditMode ? "4px 14px 10px" : "8px 14px 10px", overflowX: "auto", scrollbarWidth: "none" }}>
+                  {driveLoading && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", padding: "10px 0", fontFamily: "var(--font-mono)", alignSelf: "center" }}>{t("library_syncing")}</div>}
+                  {!driveLoading && pitchVideos.length === 0 && (
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", padding: "10px 0", fontFamily: "var(--font-mono)", alignSelf: "center" }}>
+                      {googleUser ? t("library_drive_empty") : t("library_login_hint")}
+                    </div>
+                  )}
+                  {pitchVideos.map((v, i) => (
+                    <div key={v.id} onClick={() => setSelectedPitchVideoIdx(i)} style={{
+                      flexShrink: 0, width: 108, cursor: "pointer", borderRadius: 8, overflow: "hidden",
+                      border: `1.5px solid ${i === selectedPitchVideoIdx ? COLORS.highlight : "rgba(255,255,255,0.07)"}`,
+                      background: i === selectedPitchVideoIdx ? "rgba(0,102,255,0.1)" : "rgba(255,255,255,0.04)",
+                      transform: i === selectedPitchVideoIdx ? "scale(1.04) translateY(-1px)" : "scale(1)",
+                      transition: "all 0.15s ease",
+                      boxShadow: i === selectedPitchVideoIdx ? "0 4px 20px rgba(0,102,255,0.3)" : "none",
+                    }}>
+                      <div style={{ width: "100%", aspectRatio: "16/9", position: "relative", overflow: "hidden", background: "#0a0c14" }}>
+                        {v.thumbnailLink
+                          ? <img src={v.thumbnailLink} alt={v.name} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.9 }} />
+                          : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {v.type === "youtube"
+                                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.54 3.5 12 3.5 12 3.5s-7.54 0-9.38.55A3.02 3.02 0 0 0 .5 6.19C0 8.04 0 12 0 12s0 3.96.5 5.81a3.02 3.02 0 0 0 2.12 2.14C4.46 20.5 12 20.5 12 20.5s7.54 0 9.38-.55a3.02 3.02 0 0 0 2.12-2.14C24 15.96 24 12 24 12s0-3.96-.5-5.81zM9.75 15.52v-7.04L15.5 12l-5.75 3.52z"/></svg>
+                                : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                              }
+                            </div>
+                        }
+                        {i === selectedPitchVideoIdx && (
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,102,255,0.15)" }}>
+                            <div style={{ width: 18, height: 18, borderRadius: "50%", background: COLORS.highlight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <svg width="6" height="6" viewBox="0 0 24 24" fill="#fff"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ padding: "5px 7px" }}>
+                        <div style={{ fontSize: 9, color: i === selectedPitchVideoIdx ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.45)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>
+                        <div style={{ fontSize: 8, color: "rgba(255,255,255,0.2)", marginTop: 1, textTransform: "uppercase", letterSpacing: "0.05em" }}>{v.type === "youtube" ? "YT" : v.type === "drive" ? "Drive" : "URL"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   const renderGrowthROI = () => (
     <motion.div key="roi" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ maxWidth: 800 }}>
@@ -824,6 +1618,7 @@ export default function ServLinkBackOffice() {
 
   const renderSprintsBoard = () => {
     const columns = ["Backlog", "To Do", "In Progress", "Done"];
+    const colLabel = { "Backlog": t("col_backlog"), "To Do": t("col_todo"), "In Progress": t("col_inprogress"), "Done": t("col_done") };
     return (
       <motion.div key="sprints" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ height: "calc(100vh - 160px)", display: "flex", flexDirection: "column" }}>
         
@@ -832,7 +1627,7 @@ export default function ServLinkBackOffice() {
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <EditableText path="scrum.sprintTitle" as="h2" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, marginBottom: 4, margin: 0 }} />
-              <div style={{ fontSize: 13, color: COLORS.textMuted, display: "flex", alignItems: "center", gap: 6 }}><Icons.List /> {tasks.length} issues</div>
+              <div style={{ fontSize: 13, color: COLORS.textMuted, display: "flex", alignItems: "center", gap: 6 }}><Icons.List /> {visibleTasks.length}{visibleTasks.length !== tasks.length ? ` / ${tasks.length}` : ""} issues</div>
             </div>
             
             <div style={{ height: 24, width: 1, background: COLORS.border, margin: "0 8px" }} />
@@ -842,15 +1637,57 @@ export default function ServLinkBackOffice() {
               <button onClick={() => setSprintView("list")} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, background: sprintView === "list" ? COLORS.border : "transparent", color: sprintView === "list" ? COLORS.text : COLORS.textMuted, border: "none", cursor: "pointer" }}><Icons.List /></button>
             </div>
             
-            <div style={{ display: "flex", gap: 8, marginLeft: 8 }}>
-              {["Modo Eu", "Prioridade", "Responsável"].map(f => (
-                <button key={f} style={{ background: "transparent", border: `1px dashed ${COLORS.border}`, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, color: COLORS.textMuted, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "0.2s" }} onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.textDim} onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}>{f}</button>
-              ))}
+            <div style={{ display: "flex", gap: 8, marginLeft: 8, position: "relative" }}>
+              <button
+                onClick={() => setFilterModeEu(v => !v)}
+                style={{ background: filterModeEu ? COLORS.text : "transparent", border: `1px solid ${filterModeEu ? COLORS.text : COLORS.border}`, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, color: filterModeEu ? "#fff" : COLORS.textMuted, cursor: "pointer", transition: "0.2s" }}
+              >{t("filter_just_me")}</button>
+              <button
+                onClick={() => setFilterSortPriority(v => !v)}
+                style={{ background: filterSortPriority ? COLORS.text : "transparent", border: `1px solid ${filterSortPriority ? COLORS.text : COLORS.border}`, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, color: filterSortPriority ? "#fff" : COLORS.textMuted, cursor: "pointer", transition: "0.2s" }}
+              >{t("filter_priority")}</button>
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowAssigneeDropdown(v => !v)}
+                  style={{ background: filterAssignee ? COLORS.text : "transparent", border: `1px solid ${filterAssignee ? COLORS.text : COLORS.border}`, padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, color: filterAssignee ? "#fff" : COLORS.textMuted, cursor: "pointer", transition: "0.2s", display: "flex", alignItems: "center", gap: 6 }}
+                >{filterAssignee || t("filter_assignee")} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                {showAssigneeDropdown && (
+                  <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: COLORS.surfaceSolid, border: `1px solid ${COLORS.border}`, borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", zIndex: 50, minWidth: 180, overflow: "hidden" }}>
+                    <div onClick={() => { setFilterAssignee(null); setShowAssigneeDropdown(false); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: COLORS.textMuted }} onMouseEnter={e => e.currentTarget.style.background = COLORS.bgAlt} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>{t("filter_all")}</div>
+                    {members.map(m => (
+                      <div key={m.initials} onClick={() => { setFilterAssignee(m.initials); setShowAssigneeDropdown(false); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: COLORS.text }} onMouseEnter={e => e.currentTarget.style.background = COLORS.bgAlt} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <div style={{ width: 20, height: 20, borderRadius: "50%", background: COLORS.text, color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{m.initials}</div>
+                        {m.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
-          <div>
-            <button style={{ background: COLORS.text, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}><span style={{ fontFamily: "var(--font-mono)" }}>+</span> New Issue</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Gmail notification toggle */}
+            <button
+              onClick={gmailConnected ? () => { gmailTokenRef.current = null; setGmailConnected(false); } : connectGmail}
+              disabled={gmailConnecting || !gsiReady}
+              title={gmailConnected ? `Notificações ativas → ${NOTIFY_EMAIL}` : "Ativar notificações por email"}
+              style={{ background: "transparent", border: `1px solid ${gmailConnected ? "#22C55E" : COLORS.border}`, padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: (gmailConnecting || !gsiReady) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 5, color: gmailConnected ? "#22C55E" : COLORS.textMuted, transition: "0.2s", opacity: (!gsiReady && !gmailConnected) ? 0.5 : 1 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              {gmailConnecting ? t("gmail_connecting") : gmailConnected ? t("gmail_active") : t("gmail_label")}
+            </button>
+            <button
+              onClick={syncAllToGitHub}
+              disabled={githubSyncingAll}
+              style={{ background: "transparent", color: githubSyncingAll ? COLORS.textMuted : COLORS.text, border: `1px solid ${COLORS.border}`, padding: "8px 14px", borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: githubSyncingAll ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, transition: "0.2s", opacity: githubSyncingAll ? 0.7 : 1 }}
+              onMouseEnter={e => { if (!githubSyncingAll) e.currentTarget.style.borderColor = COLORS.textDim; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; }}
+            >
+              <Icons.Github />
+              {githubSyncingAll ? t("gmail_connecting") : t("sync_github")}
+            </button>
+            <button onClick={() => { setNewIssueDraft(emptyDraft()); setNewDraftSubtask({ text: "", deadline: "", assignee: "MC" }); setModalOffset({ x: 0, y: 0 }); setShowNewIssue(true); }} style={{ background: COLORS.text, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}><span style={{ fontFamily: "var(--font-mono)" }}>+</span> {t("new_issue")}</button>
           </div>
         </div>
 
@@ -858,59 +1695,68 @@ export default function ServLinkBackOffice() {
         {sprintView === "board" && (
           <div style={{ flex: 1, display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16 }}>
             {columns.map(col => {
-              const colTasks = tasks.filter(t => t.status === col);
+              const colTasks = visibleTasks.filter(t => t.status === col);
               return (
-                <div 
+                <div
                   key={col}
                   onDragOver={handleDragOver}
                   onDrop={e => handleDrop(e, col)}
-                  style={{ flex: 1, minWidth: 280, display: "flex", flexDirection: "column", gap: 12, background: "rgba(255,255,255,0.4)", border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12 }}
+                  style={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 12, background: "rgba(255,255,255,0.4)", border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12 }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, padding: "0 4px" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{col}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: COLORS.text }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_DOT[col] || COLORS.textDim }} />
+                      {colLabel[col] || col}
+                    </div>
                     <div style={{ fontSize: 12, color: COLORS.textMuted, fontFamily: "var(--font-mono)", background: COLORS.surfaceSolid, padding: "2px 6px", borderRadius: 12, border: `1px solid ${COLORS.border}` }}>{colTasks.length}</div>
                   </div>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                    {colTasks.map(task => (
-                      <motion.div
-                        layoutId={task.id}
-                        key={task.id}
-                        draggable
-                        onDragStart={e => handleDragStart(e, task.id)}
-                        onClick={() => setSelectedTask(task)}
-                        className="bento-card"
-                        style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, background: COLORS.surfaceSolid, opacity: draggedTaskId === task.id ? 0.5 : 1 }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: COLORS.textDim }}>{task.id}</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, color: task.priority === "High" ? COLORS.text : COLORS.textMuted }}>
-                            {task.priority === "High" && <Icons.High />}
-                            {task.priority === "Medium" && <Icons.Medium />}
-                            {task.priority === "Low" && <Icons.Low />}
+                    {colTasks.map(task => {
+                      const subs = getSubtasks(task);
+                      const subsDone = subs.filter(s => s.done).length;
+                      return (
+                        <motion.div
+                          layoutId={task.id}
+                          key={task.id}
+                          draggable
+                          onDragStart={e => handleDragStart(e, task.id)}
+                          onClick={() => setSelectedTask(task)}
+                          className="bento-card"
+                          style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10, background: COLORS.surfaceSolid, opacity: draggedTaskId === task.id ? 0.4 : 1, cursor: "pointer" }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: COLORS.textDim }}>{task.id}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <button onClick={e => { e.stopPropagation(); syncTaskToGitHub(task); }} title="Sync to GitHub"
+                                style={{ background: "transparent", border: "none", cursor: "pointer", padding: 2, color: githubSyncMap[task.id] === "synced" ? "#22C55E" : githubSyncMap[task.id] === "error" ? COLORS.red : COLORS.textDim, display: "flex", alignItems: "center" }}>
+                                {githubSyncMap[task.id] === "syncing" ? <Icons.Refresh /> : githubSyncMap[task.id] === "synced" ? <Icons.Check /> : <Icons.Sync />}
+                              </button>
+                              <div style={{ color: task.priority === "High" ? COLORS.text : COLORS.textMuted }}>
+                                {task.priority === "High" && <Icons.High />}
+                                {task.priority === "Medium" && <Icons.Medium />}
+                                {task.priority === "Low" && <Icons.Low />}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text, marginBottom: 6, lineHeight: 1.3 }}>{task.title}</div>
-                        </div>
-                        
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                          <div style={{ display: "flex", gap: 12 }}>
-                            {task.subtasks && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)" }}><Icons.Checkbox /> {task.subtasks.done}/{task.subtasks.total}</div>
-                            )}
-                            {task.deadline && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)" }}><Icons.Calendar /> {task.deadline}</div>
-                            )}
+                          <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text, lineHeight: 1.4 }}>{task.title}</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", gap: 10 }}>
+                              {subs.length > 0 && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)" }}><Icons.Checkbox /> {subsDone}/{subs.length}</div>
+                              )}
+                              {task.deadline && task.deadline !== "TBD" && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)" }}><Icons.Calendar /> {formatDeadline(task.deadline)}</div>
+                              )}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center" }}>
+                              {(task.assignees || []).map(a => (
+                                <div key={a} style={{ width: 20, height: 20, borderRadius: "50%", background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, border: `2px solid ${COLORS.surfaceSolid}`, marginLeft: -4 }}>{a}</div>
+                              ))}
+                            </div>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center" }}>
-                            {task.assignees.map(a => (
-                              <div key={a} style={{ width: 22, height: 22, borderRadius: "50%", background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 600, border: `2px solid ${COLORS.surfaceSolid}`, marginLeft: -4 }}>{a}</div>
-                            ))}
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -922,19 +1768,19 @@ export default function ServLinkBackOffice() {
         {sprintView === "list" && (
           <div style={{ flex: 1, overflowY: "auto", background: COLORS.surfaceSolid, border: `1px solid ${COLORS.border}`, borderRadius: 12 }}>
             <div style={{ display: "flex", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}`, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: COLORS.textMuted, fontWeight: 600 }}>
-              <div style={{ width: 80 }}>ID</div>
-              <div style={{ flex: 1 }}>Title</div>
-              <div style={{ width: 120 }}>Status</div>
-              <div style={{ width: 100 }}>Priority</div>
-              <div style={{ width: 100 }}>Assignee</div>
+              <div style={{ width: 80 }}>{t("list_id")}</div>
+              <div style={{ flex: 1 }}>{t("list_title")}</div>
+              <div style={{ width: 120 }}>{t("list_status")}</div>
+              <div style={{ width: 100 }}>{t("list_priority")}</div>
+              <div style={{ width: 100 }}>{t("list_assignee")}</div>
             </div>
-            {tasks.map(task => (
+            {visibleTasks.map(task => (
               <div key={task.id} onClick={() => setSelectedTask(task)} style={{ display: "flex", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}`, alignItems: "center", fontSize: 13, cursor: "pointer" }} className="bento-card">
                 <div style={{ width: 80, fontFamily: "var(--font-mono)", color: COLORS.textMuted }}>{task.id}</div>
                 <div style={{ flex: 1, fontWeight: 500, color: COLORS.text }}>{task.title}</div>
                 <div style={{ width: 120 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.textDim }} /> {task.status}
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_DOT[task.status] || COLORS.textDim }} /> {task.status}
                   </span>
                 </div>
                 <div style={{ width: 100, display: "flex", alignItems: "center", gap: 6, color: task.priority === "High" ? COLORS.text : COLORS.textMuted }}>
@@ -945,7 +1791,7 @@ export default function ServLinkBackOffice() {
                 </div>
                 <div style={{ width: 100 }}>
                   <div style={{ display: "flex", alignItems: "center" }}>
-                    {task.assignees.map(a => (
+                    {(task.assignees || []).map(a => (
                       <div key={a} style={{ width: 22, height: 22, borderRadius: "50%", background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 600, border: `2px solid ${COLORS.surfaceSolid}`, marginLeft: -4 }}>{a}</div>
                     ))}
                   </div>
@@ -955,78 +1801,348 @@ export default function ServLinkBackOffice() {
           </div>
         )}
 
+        {/* ── New Issue Modal (draggable) ── */}
+        <AnimatePresence>
+          {showNewIssue && (
+            <>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => { setShowNewIssue(false); setModalOffset({ x: 0, y: 0 }); }}
+                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(4px)", zIndex: 200 }} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+                style={{
+                  position: "fixed",
+                  top: `calc(50% + ${modalOffset.y}px)`,
+                  left: `calc(50% + ${modalOffset.x}px)`,
+                  transform: "translate(-50%,-50%)",
+                  width: 540,
+                  maxHeight: "85vh",
+                  overflowY: "auto",
+                  background: COLORS.surfaceSolid,
+                  borderRadius: 16,
+                  border: `1px solid ${COLORS.border}`,
+                  zIndex: 201,
+                  boxShadow: "0 24px 48px rgba(0,0,0,0.18)",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                {/* Drag handle header */}
+                <div
+                  ref={modalDragRef}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const startX = e.clientX - modalOffset.x;
+                    const startY = e.clientY - modalOffset.y;
+                    const onMove = (ev) => setModalOffset({ x: ev.clientX - startX, y: ev.clientY - startY });
+                    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+                    document.addEventListener("mousemove", onMove);
+                    document.addEventListener("mouseup", onUp);
+                  }}
+                  style={{ padding: "16px 24px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "grab", userSelect: "none" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={COLORS.textDim} strokeWidth="2"><circle cx="8" cy="6" r="1.5" fill={COLORS.textDim}/><circle cx="16" cy="6" r="1.5" fill={COLORS.textDim}/><circle cx="8" cy="12" r="1.5" fill={COLORS.textDim}/><circle cx="16" cy="12" r="1.5" fill={COLORS.textDim}/><circle cx="8" cy="18" r="1.5" fill={COLORS.textDim}/><circle cx="16" cy="18" r="1.5" fill={COLORS.textDim}/></svg>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: COLORS.text }}>{t("modal_new_issue")}</div>
+                  </div>
+                  <button onClick={() => { setShowNewIssue(false); setModalOffset({ x: 0, y: 0 }); }} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 20, color: COLORS.textMuted, lineHeight: 1 }}>&times;</button>
+                </div>
+
+                <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* Título */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_title")}</label>
+                    <input value={newIssueDraft.title} onChange={e => setNewIssueDraft(p => ({...p, title: e.target.value}))} placeholder={t("field_title_placeholder")} style={{ width: "100%", padding: "10px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 14, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = COLORS.text} onBlur={e => e.target.style.borderColor = COLORS.border} />
+                  </div>
+                  {/* Descrição */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_desc")}</label>
+                    <textarea value={newIssueDraft.desc} onChange={e => setNewIssueDraft(p => ({...p, desc: e.target.value}))} placeholder={t("field_desc_placeholder")} rows={3} style={{ width: "100%", padding: "10px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none", resize: "vertical", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = COLORS.text} onBlur={e => e.target.style.borderColor = COLORS.border} />
+                  </div>
+                  {/* Metadata grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_status")}</label>
+                      <select value={newIssueDraft.status} onChange={e => setNewIssueDraft(p => ({...p, status: e.target.value}))} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}>
+                        {["Backlog","To Do","In Progress","Done"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_priority")}</label>
+                      <select value={newIssueDraft.priority} onChange={e => setNewIssueDraft(p => ({...p, priority: e.target.value}))} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}>
+                        {["High","Medium","Low"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_assignee")}</label>
+                      <select value={newIssueDraft.assignees[0] || ""} onChange={e => setNewIssueDraft(p => ({...p, assignees: [e.target.value]}))} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}>
+                        {members.map(m => <option key={m.initials} value={m.initials}>{m.name} ({m.initials})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_estimate")}</label>
+                      <input type="number" min="1" max="21" value={newIssueDraft.points} onChange={e => setNewIssueDraft(p => ({...p, points: Number(e.target.value)}))} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  {/* Due Date */}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>{t("field_duedate")}</label>
+                    <input type="date" value={newIssueDraft.deadline} onChange={e => setNewIssueDraft(p => ({...p, deadline: e.target.value}))} style={{ width: "100%", padding: "8px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none", boxSizing: "border-box" }} />
+                  </div>
+
+                  {/* ── Subtasks ── */}
+                  <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 16 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: 10 }}>{t("field_subtasks")}</label>
+                    {/* Existing draft subtasks */}
+                    {newIssueDraft.subtasks.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                        {newIssueDraft.subtasks.map((st, i) => (
+                          <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: COLORS.bg, borderRadius: 8, border: `1px solid ${COLORS.border}` }}>
+                            <div style={{ flex: 1, fontSize: 13, color: COLORS.text, fontWeight: 500 }}>{st.text}</div>
+                            {st.deadline && <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)" }}>{st.deadline}</div>}
+                            {st.assignee && <div style={{ fontSize: 11, background: COLORS.bgAlt, padding: "2px 6px", borderRadius: 4, color: COLORS.textMuted, fontWeight: 600 }}>{st.assignee}</div>}
+                            <button onClick={() => setNewIssueDraft(p => ({ ...p, subtasks: p.subtasks.filter((_, j) => j !== i) }))} style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>&times;</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Add subtask row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 100px 36px", gap: 8, alignItems: "center" }}>
+                      <input
+                        value={newDraftSubtask.text}
+                        onChange={e => setNewDraftSubtask(p => ({...p, text: e.target.value}))}
+                        placeholder={t("field_subtask_placeholder")}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && newDraftSubtask.text.trim()) {
+                            setNewIssueDraft(p => ({ ...p, subtasks: [...p.subtasks, { id: Math.random().toString(36).substr(2,6), text: newDraftSubtask.text.trim(), deadline: newDraftSubtask.deadline, assignee: newDraftSubtask.assignee, done: false }] }));
+                            setNewDraftSubtask({ text: "", deadline: "", assignee: "MC" });
+                          }
+                        }}
+                        style={{ padding: "7px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 7, fontSize: 13, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}
+                        onFocus={e => e.target.style.borderColor = COLORS.text} onBlur={e => e.target.style.borderColor = COLORS.border}
+                      />
+                      <input
+                        type="date"
+                        value={newDraftSubtask.deadline}
+                        onChange={e => setNewDraftSubtask(p => ({...p, deadline: e.target.value}))}
+                        style={{ padding: "7px 8px", border: `1px solid ${COLORS.border}`, borderRadius: 7, fontSize: 12, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}
+                      />
+                      <select
+                        value={newDraftSubtask.assignee}
+                        onChange={e => setNewDraftSubtask(p => ({...p, assignee: e.target.value}))}
+                        style={{ padding: "7px 8px", border: `1px solid ${COLORS.border}`, borderRadius: 7, fontSize: 12, fontFamily: "inherit", color: COLORS.text, background: COLORS.bg, outline: "none" }}
+                      >
+                        {members.map(m => <option key={m.initials} value={m.initials}>{m.initials}</option>)}
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (!newDraftSubtask.text.trim()) return;
+                          setNewIssueDraft(p => ({ ...p, subtasks: [...p.subtasks, { id: Math.random().toString(36).substr(2,6), text: newDraftSubtask.text.trim(), deadline: newDraftSubtask.deadline, assignee: newDraftSubtask.assignee, done: false }] }));
+                          setNewDraftSubtask({ text: "", deadline: "", assignee: "MC" });
+                        }}
+                        style={{ width: 36, height: 36, border: `1px solid ${COLORS.border}`, borderRadius: 7, background: COLORS.text, color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 }}
+                      >+</button>
+                    </div>
+                    <div style={{ fontSize: 11, color: COLORS.textDim, marginTop: 6 }}>{t("subtask_hint")}</div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                    <button onClick={() => { setShowNewIssue(false); setModalOffset({ x: 0, y: 0 }); }} style={{ flex: 1, padding: "10px", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: "transparent", color: COLORS.textMuted, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>{t("btn_cancel")}</button>
+                    <button onClick={createNewIssue} disabled={!newIssueDraft.title.trim()} style={{ flex: 2, padding: "10px", border: "none", borderRadius: 8, background: newIssueDraft.title.trim() ? COLORS.text : COLORS.textDim, color: "#fff", fontSize: 14, fontWeight: 600, cursor: newIssueDraft.title.trim() ? "pointer" : "not-allowed", boxShadow: newIssueDraft.title.trim() ? "0 4px 12px rgba(0,0,0,0.15)" : "none" }}>{t("btn_create_issue")}</button>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* ── Task Detail Panel (fully editable) ── */}
         <AnimatePresence>
           {selectedTask && (
             <>
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setSelectedTask(null)}
-                style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.2)", backdropFilter: "blur(4px)", zIndex: 100 }}
-              />
+                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.2)", backdropFilter: "blur(4px)", zIndex: 100 }} />
               <motion.div
                 initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 440, background: COLORS.surfaceSolid, borderLeft: `1px solid ${COLORS.border}`, zIndex: 101, display: "flex", flexDirection: "column", boxShadow: "-20px 0 40px rgba(0,0,0,0.1)" }}
+                style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 460, background: COLORS.surfaceSolid, borderLeft: `1px solid ${COLORS.border}`, zIndex: 101, display: "flex", flexDirection: "column", boxShadow: "-20px 0 40px rgba(0,0,0,0.1)" }}
               >
-                <div style={{ padding: "16px 24px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.bg }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: COLORS.textMuted, background: COLORS.surfaceSolid, padding: "2px 8px", borderRadius: 4, border: `1px solid ${COLORS.border}` }}>{selectedTask.id}</div>
-                    <div style={{ fontSize: 13, color: COLORS.textMuted }}>in <span style={{ color: COLORS.text, fontWeight: 500 }}>{selectedTask.sprint}</span></div>
+                {/* Panel Header */}
+                <div style={{ padding: "14px 20px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: COLORS.bg, flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: COLORS.textMuted, background: COLORS.surfaceSolid, padding: "2px 8px", borderRadius: 4, border: `1px solid ${COLORS.border}` }}>{selectedTask.id}</div>
+                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>{t("panel_in")} <b style={{ color: COLORS.text }}>{selectedTask.sprint}</b></div>
                   </div>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    <button style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textMuted }}><Icons.Play /></button>
-                    <button onClick={() => setSelectedTask(null)} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 20, color: COLORS.textMuted }}>&times;</button>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button onClick={() => syncTaskToGitHub(selectedTask)} disabled={githubSyncMap[selectedTask.id] === "syncing"}
+                      style={{ background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 6, cursor: "pointer", padding: "4px 10px", color: githubSyncMap[selectedTask.id] === "synced" ? "#22C55E" : githubSyncMap[selectedTask.id] === "error" ? COLORS.red : COLORS.textMuted, display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, transition: "0.2s" }}>
+                      {githubSyncMap[selectedTask.id] === "syncing" ? <><Icons.Refresh /> Syncing...</> : githubSyncMap[selectedTask.id] === "synced" ? <><Icons.Check /> Synced</> : githubSyncMap[selectedTask.id] === "error" ? "⚠ Erro" : <><Icons.Github /> GitHub</>}
+                    </button>
+                    <button onClick={() => setSelectedTask(null)} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 20, color: COLORS.textMuted, lineHeight: 1 }}>&times;</button>
                   </div>
                 </div>
-                
-                <div style={{ padding: 32, flex: 1, overflowY: "auto" }}>
-                  <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24, letterSpacing: "-0.02em" }}>{selectedTask.title}</h2>
-                  
-                  {/* Meta Grid */}
-                  <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "16px 0", fontSize: 13, marginBottom: 32 }}>
-                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center" }}>Assignee</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {selectedTask.assignees.map(a => (
-                        <div key={a} style={{ width: 24, height: 24, borderRadius: "50%", background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600 }}>{a}</div>
-                      ))}
-                    </div>
-                    
-                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center" }}>Status</div>
-                    <div><span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: COLORS.surface, border: `1px solid ${COLORS.border}`, padding: "4px 8px", borderRadius: 6, fontWeight: 500 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.textDim }} /> {selectedTask.status}</span></div>
 
-                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center" }}>Priority</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500, color: selectedTask.priority === "High" ? COLORS.text : COLORS.textMuted }}>
-                      {selectedTask.priority === "High" && <Icons.High />}
-                      {selectedTask.priority === "Medium" && <Icons.Medium />}
-                      {selectedTask.priority === "Low" && <Icons.Low />}
-                      {selectedTask.priority}
-                    </div>
-
-                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center" }}>Estimate</div>
-                    <div style={{ fontFamily: "var(--font-mono)" }}>{selectedTask.points} <span style={{ color: COLORS.textMuted }}>pts</span></div>
-
-                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center" }}>Due Date</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, color: COLORS.text }}><Icons.Calendar /> {selectedTask.deadline}</div>
+                {/* Scrollable Body */}
+                <div style={{ padding: "24px 28px", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 24 }}>
+                  {/* Title — clearly labelled + editable */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{t("panel_title_label")}</div>
+                    <textarea
+                      value={selectedTask.title}
+                      onChange={e => updateTask(selectedTask.id, "title", e.target.value)}
+                      rows={2}
+                      placeholder={t("panel_title_placeholder")}
+                      style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 8, outline: "none", resize: "none", background: COLORS.bg, fontFamily: "inherit", width: "100%", lineHeight: 1.35, padding: "10px 12px", boxSizing: "border-box", transition: "border-color 0.2s" }}
+                      onFocus={e => e.target.style.borderColor = COLORS.text}
+                      onBlur={e => e.target.style.borderColor = COLORS.border}
+                    />
                   </div>
-                  
-                  <div style={{ height: 1, background: COLORS.border, margin: "32px -32px" }} />
-                  
-                  <div style={{ fontSize: 15, color: COLORS.text, lineHeight: 1.6 }}>
-                    {selectedTask.desc}
+
+                  {/* Meta Fields Grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", rowGap: 14, fontSize: 13 }}>
+                    {/* Assignee */}
+                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center", fontSize: 12 }}>{t("field_assignee")}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", position: "relative" }}>
+                      {(selectedTask.assignees || []).map(a => {
+                        const member = members.find(m => m.initials === a);
+                        return (
+                          <div key={a} style={{ display: "flex", alignItems: "center", gap: 6, background: COLORS.bgAlt, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "3px 8px" }}>
+                            <div style={{ width: 18, height: 18, borderRadius: "50%", background: COLORS.text, color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{a}</div>
+                            <span style={{ fontSize: 12, color: COLORS.text }}>{member?.name || a}</span>
+                            {member?.email && <span style={{ fontSize: 10, color: COLORS.textDim }}>{member.email}</span>}
+                            <button onClick={() => updateTask(selectedTask.id, "assignees", (selectedTask.assignees || []).filter(x => x !== a))}
+                              style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                          </div>
+                        );
+                      })}
+                      {/* Custom +Add popover */}
+                      {members.filter(m => !(selectedTask.assignees || []).includes(m.initials)).length > 0 && (
+                        <div style={{ position: "relative" }}>
+                          <button
+                            onClick={() => setShowAddMember(v => !v)}
+                            style={{ border: `1px dashed ${showAddMember ? COLORS.text : COLORS.border}`, borderRadius: 6, padding: "4px 10px", fontSize: 12, background: showAddMember ? COLORS.bgAlt : "transparent", color: COLORS.textMuted, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, transition: "0.15s", fontFamily: "inherit" }}
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add
+                          </button>
+                          {showAddMember && (
+                            <>
+                              <div onClick={() => setShowAddMember(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
+                              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, background: COLORS.surfaceSolid, border: `1px solid ${COLORS.border}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 201, minWidth: 220, overflow: "hidden" }}>
+                                <div style={{ padding: "8px 12px 6px", fontSize: 10, fontWeight: 600, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("panel_add_assignee")}</div>
+                                {members.filter(m => !(selectedTask.assignees || []).includes(m.initials)).map(m => (
+                                  <div key={m.initials}
+                                    onClick={() => { updateTask(selectedTask.id, "assignees", [...(selectedTask.assignees || []), m.initials]); setShowAddMember(false); }}
+                                    style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", transition: "0.15s" }}
+                                    onMouseEnter={e => e.currentTarget.style.background = COLORS.bgAlt}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                  >
+                                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: COLORS.text, color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{m.initials}</div>
+                                    <div>
+                                      <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{m.name}</div>
+                                      <div style={{ fontSize: 11, color: COLORS.textMuted }}>{m.email}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status */}
+                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center", fontSize: 12 }}>Status</div>
+                    <div>
+                      <select value={selectedTask.status} onChange={e => updateTask(selectedTask.id, "status", e.target.value)}
+                        style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, fontWeight: 500, color: COLORS.text, background: COLORS.bg, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+                        {["Backlog","To Do","In Progress","Done"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Priority */}
+                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center", fontSize: 12 }}>{t("field_priority")}</div>
+                    <div>
+                      <select value={selectedTask.priority} onChange={e => updateTask(selectedTask.id, "priority", e.target.value)}
+                        style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, fontWeight: 500, color: COLORS.text, background: COLORS.bg, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+                        {["High","Medium","Low"].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Estimate */}
+                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center", fontSize: 12 }}>{t("field_estimate")}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="number" min="1" max="21" value={selectedTask.points || 1} onChange={e => updateTask(selectedTask.id, "points", Number(e.target.value))}
+                        style={{ width: 56, padding: "5px 8px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, fontFamily: "var(--font-mono)", color: COLORS.text, background: COLORS.bg, outline: "none", textAlign: "center" }} />
+                      <span style={{ fontSize: 12, color: COLORS.textMuted }}>{t("pts_suffix")}</span>
+                    </div>
+
+                    {/* Due Date */}
+                    <div style={{ color: COLORS.textMuted, display: "flex", alignItems: "center", fontSize: 12 }}>{t("field_duedate")}</div>
+                    <div>
+                      <input type="date" value={selectedTask.deadline && selectedTask.deadline.includes("-") ? selectedTask.deadline : ""} onChange={e => updateTask(selectedTask.id, "deadline", e.target.value)}
+                        style={{ padding: "5px 10px", border: `1px solid ${COLORS.border}`, borderRadius: 6, fontSize: 12, color: COLORS.text, background: COLORS.bg, outline: "none", fontFamily: "inherit" }} />
+                    </div>
                   </div>
-                  
-                  {selectedTask.subtasks && (
-                    <div style={{ marginTop: 32 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.textMuted, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Subtasks</div>
-                      <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 8, overflow: "hidden" }}>
-                        {Array.from({length: selectedTask.subtasks.total}).map((_, i) => (
-                           <div key={i} style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: i < selectedTask.subtasks.total - 1 ? `1px solid ${COLORS.border}` : 'none', background: COLORS.surfaceSolid }}>
-                             <input type="checkbox" checked={i < selectedTask.subtasks.done} readOnly style={{ width: 16, height: 16, accentColor: COLORS.text }} />
-                             <span style={{ fontSize: 13, color: i < selectedTask.subtasks.done ? COLORS.textDim : COLORS.text, textDecoration: i < selectedTask.subtasks.done ? "line-through" : "none" }}>Subtask placeholder {i + 1}</span>
-                           </div>
-                        ))}
+
+                  <div style={{ height: 1, background: COLORS.border, margin: "0 -28px" }} />
+
+                  {/* Description */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{t("panel_description")}</div>
+                    <textarea
+                      value={selectedTask.desc || ""}
+                      onChange={e => updateTask(selectedTask.id, "desc", e.target.value)}
+                      placeholder={t("panel_desc_placeholder")}
+                      rows={4}
+                      style={{ width: "100%", padding: "10px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 13, lineHeight: 1.6, color: COLORS.text, background: COLORS.bg, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
+                      onFocus={e => e.target.style.borderColor = COLORS.text}
+                      onBlur={e => e.target.style.borderColor = COLORS.border}
+                    />
+                  </div>
+
+                  {/* Subtasks */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        {t("panel_subtasks")} {getSubtasks(selectedTask).length > 0 && `(${getSubtasks(selectedTask).filter(s=>s.done).length}/${getSubtasks(selectedTask).length})`}
                       </div>
                     </div>
-                  )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {getSubtasks(selectedTask).map((sub) => (
+                        <div key={sub.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 6, background: COLORS.bgAlt, border: `1px solid ${COLORS.border}` }}>
+                          <input type="checkbox" checked={sub.done} onChange={() => toggleSubtask(selectedTask.id, sub.id)}
+                            style={{ width: 15, height: 15, accentColor: COLORS.text, cursor: "pointer", flexShrink: 0 }} />
+                          <input
+                            value={sub.text}
+                            onChange={e => {
+                              const subs = getSubtasks(selectedTask).map(s => s.id === sub.id ? {...s, text: e.target.value} : s);
+                              updateTask(selectedTask.id, "subtasks", subs);
+                            }}
+                            style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, color: sub.done ? COLORS.textDim : COLORS.text, textDecoration: sub.done ? "line-through" : "none", fontFamily: "inherit" }}
+                          />
+                          <button onClick={() => removeSubtask(selectedTask.id, sub.id)}
+                            style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+                        </div>
+                      ))}
+                      {/* Add subtask input */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                        <input
+                          value={newSubtaskText}
+                          onChange={e => setNewSubtaskText(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { addSubtask(selectedTask.id, newSubtaskText); setNewSubtaskText(""); } }}
+                          placeholder={t("panel_subtask_placeholder")}
+                          style={{ flex: 1, padding: "8px 10px", border: `1px dashed ${COLORS.border}`, borderRadius: 6, fontSize: 13, background: "transparent", color: COLORS.text, outline: "none", fontFamily: "inherit" }}
+                          onFocus={e => e.target.style.borderColor = COLORS.textDim}
+                          onBlur={e => e.target.style.borderColor = COLORS.border}
+                        />
+                        {newSubtaskText && (
+                          <button onClick={() => { addSubtask(selectedTask.id, newSubtaskText); setNewSubtaskText(""); }}
+                            style={{ padding: "8px 12px", background: COLORS.text, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{t("panel_add_btn")}</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </>
@@ -1085,7 +2201,7 @@ export default function ServLinkBackOffice() {
                 <EditableText path={`home.cards.${idx}.desc`} as="p" style={{ fontSize: 14, color: COLORS.textMuted, lineHeight: 1.5, margin: 0 }} />
               </div>
               <div style={{ marginTop: "auto", paddingTop: 16, display: "flex", alignItems: "center", color: COLORS.textDim, fontSize: 13, fontWeight: 500, fontFamily: "var(--font-mono)" }}>
-                [Acessar Módulo] <span style={{ marginLeft: 6 }}><Icons.ArrowRight /></span>
+                {t("nav_access")} <span style={{ marginLeft: 6 }}><Icons.ArrowRight /></span>
               </div>
             </motion.div>
           )})}
@@ -1093,7 +2209,75 @@ export default function ServLinkBackOffice() {
 
         {/* Status Widget Lateral */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Milestone */}
+          {/* Google Calendar Widget */}
+          <div className="bento-card" style={{ padding: 24, background: "#FFF", display: "flex", flexDirection: "column", gap: 16, cursor: "default" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: COLORS.textMuted, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                <Icons.GoogleCal /> Google Calendar
+              </div>
+              {calConnected && (
+                <button onClick={() => fetchCalendarEvents()} style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, display: "flex", alignItems: "center", padding: 2 }} title="Atualizar">
+                  <Icons.Refresh />
+                </button>
+              )}
+            </div>
+
+            {!import.meta.env.VITE_GOOGLE_CLIENT_ID || !import.meta.env.VITE_GOOGLE_CLIENT_ID.includes(".apps.googleusercontent.com") ? (
+              <div style={{ fontSize: 12, color: COLORS.textMuted, padding: "8px 12px", background: COLORS.bgAlt, borderRadius: 6, lineHeight: 1.5 }}>
+                Adicione <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>VITE_GOOGLE_CLIENT_ID</code> no <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>.env</code> e reinicie o servidor.
+              </div>
+            ) : !calConnected ? (
+              <>
+                <button
+                  onClick={connectGoogleCalendar}
+                  disabled={!gsiReady}
+                  style={{ width: "100%", padding: "10px 14px", border: `1px solid ${COLORS.border}`, borderRadius: 8, background: "#FFF", cursor: gsiReady ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, fontWeight: 500, color: gsiReady ? COLORS.text : COLORS.textMuted, transition: "0.2s", opacity: gsiReady ? 1 : 0.6 }}
+                  onMouseEnter={e => { if (gsiReady) e.currentTarget.style.borderColor = COLORS.textDim; }}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+                >
+                  <Icons.GoogleCal /> {gsiReady ? t("cal_connect") : t("loading_sdk")}
+                </button>
+                {calError && <div style={{ fontSize: 11, color: COLORS.red, lineHeight: 1.5, marginTop: -8 }}>{calError}</div>}
+              </>
+            ) : calLoading ? (
+              <div style={{ fontSize: 13, color: COLORS.textMuted, display: "flex", alignItems: "center", gap: 8 }}>
+                <Icons.Refresh /> {t("cal_loading")}
+              </div>
+            ) : calError ? (
+              <div style={{ fontSize: 12, color: COLORS.red, lineHeight: 1.5, padding: "8px 12px", background: "rgba(220,0,0,0.04)", borderRadius: 6, border: "1px solid rgba(220,0,0,0.12)" }}>
+                {calError}
+                {calError.includes("expirada") && (
+                  <button onClick={connectGoogleCalendar} style={{ display: "block", marginTop: 8, background: "transparent", border: "none", color: COLORS.highlight, cursor: "pointer", fontSize: 12, padding: 0, fontWeight: 500 }}>{t("cal_reconnect")}</button>
+                )}
+              </div>
+            ) : calEvents.length === 0 ? (
+              <div style={{ fontSize: 13, color: COLORS.textMuted }}>{t("cal_no_events")}</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {calEvents.slice(0, 3).map((event, i) => {
+                  const meetLink = getMeetLink(event);
+                  const isNext = i === 0;
+                  return (
+                    <div key={event.id || i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 8, background: isNext ? "rgba(0,102,255,0.04)" : "transparent", border: `1px solid ${isNext ? "rgba(0,102,255,0.12)" : COLORS.border}`, transition: "0.2s" }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: isNext ? "#EF4444" : COLORS.textDim, marginTop: 5, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{event.summary}</div>
+                        <div style={{ fontSize: 11, color: COLORS.textMuted }}>{formatCalTime(event)}</div>
+                        {meetLink && (
+                          <a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: COLORS.highlight, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 4, fontWeight: 500 }}>
+                            {t("cal_meet_link")} <Icons.ExternalLink />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Milestone (fallback when Calendar not connected) */}
+          {!calConnected && (
           <div className="bento-card" style={{ padding: 24, background: "#FFF", display: "flex", flexDirection: "column", gap: 16, cursor: "default" }}>
             <EditableText path="home.milestone.title" as="div" style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: COLORS.textMuted, textTransform: "uppercase" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1106,11 +2290,12 @@ export default function ServLinkBackOffice() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Sprint Progress */}
           <div className="bento-card" style={{ padding: 24, background: "#FFF", display: "flex", flexDirection: "column", gap: 16, cursor: "default" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: COLORS.textMuted, textTransform: "uppercase" }}>Sprint Progress</div>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: COLORS.textMuted, textTransform: "uppercase" }}>{t("cal_sprint_progress")}</div>
               <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: COLORS.text }}>45%</div>
             </div>
             <div style={{ width: "100%", height: 6, background: COLORS.bg, borderRadius: 3, overflow: "hidden" }}>
@@ -1123,7 +2308,7 @@ export default function ServLinkBackOffice() {
           <div className="bento-card" style={{ padding: 24, background: COLORS.slate, color: "#FFF", display: "flex", flexDirection: "column", gap: 16, cursor: "default", boxShadow: "0 12px 24px rgba(0,0,0,0.15)" }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "rgba(255,255,255,0.6)", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.green || "#22C55E" }} />
-              Telemetry Pulse
+              {t("cal_telemetry")}
             </div>
             <div style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.04em", fontFamily: "var(--font-mono)" }}>142</div>
             <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.5 }}>Talentos mapeados e injetados em database. Pronto para simulação.</div>
@@ -1133,13 +2318,13 @@ export default function ServLinkBackOffice() {
 
       {/* Footer Links */}
       <div style={{ marginTop: "auto", paddingTop: 32, borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 13, color: COLORS.textMuted }}>Dúvidas sobre os fluxos? Consulte a documentação base ou acesse o repositório.</div>
+        <div style={{ fontSize: 13, color: COLORS.textMuted }}>{t("footer_hint")}</div>
         <div style={{ display: "flex", gap: 24 }}>
           <button style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", color: COLORS.textDim, fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "0.2s" }} onMouseEnter={e => e.currentTarget.style.color = COLORS.text} onMouseLeave={e => e.currentTarget.style.color = COLORS.textDim}>
-            <Icons.Book /> GitBook Docs
+            <Icons.Book /> {t("nav_gitbook")}
           </button>
           <button style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", color: COLORS.textDim, fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "0.2s" }} onMouseEnter={e => e.currentTarget.style.color = COLORS.text} onMouseLeave={e => e.currentTarget.style.color = COLORS.textDim}>
-            <Icons.Github /> GitHub Repository
+            <Icons.Github /> {t("nav_github")}
           </button>
         </div>
       </div>
@@ -1159,26 +2344,53 @@ export default function ServLinkBackOffice() {
             <div style={{ fontWeight: 600, fontSize: 15, letterSpacing: "-0.02em" }}>ServLink WorkOS</div>
             <div style={{ width: 1, height: 16, background: COLORS.border, marginLeft: 8 }} />
             <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
-              <NavTab id="home" label="Hub Station" icon={Icons.Home} active={activeMain === "home"} set={(id) => { setActiveMain(id); setActiveSub(null); }} />
-              <NavTab id="core" label="The Engine" icon={Icons.System} active={activeMain === "core"} set={(id) => { setActiveMain(id); setActiveSub("bmc"); }} />
-              <NavTab id="growth" label="Strategy Lab" icon={Icons.Growth} active={activeMain === "growth"} set={(id) => { setActiveMain(id); setActiveSub("branding"); }} />
-              <NavTab id="tech" label="Technical Stack" icon={Icons.Tech} active={activeMain === "tech"} set={(id) => { setActiveMain(id); setActiveSub("archi"); }} />
+              <NavTab id="home" label={t("nav_home")} icon={Icons.Home} active={activeMain === "home"} set={(id) => { setActiveMain(id); setActiveSub(null); }} />
+              <NavTab id="core" label={t("nav_core")} icon={Icons.System} active={activeMain === "core"} set={(id) => { setActiveMain(id); setActiveSub("bmc"); }} />
+              <NavTab id="growth" label={t("nav_growth")} icon={Icons.Growth} active={activeMain === "growth"} set={(id) => { setActiveMain(id); setActiveSub("branding"); }} />
+              <NavTab id="tech" label={t("nav_tech")} icon={Icons.Tech} active={activeMain === "tech"} set={(id) => { setActiveMain(id); setActiveSub("archi"); }} />
               <div style={{ width: 1, height: 16, background: COLORS.border, margin: "0 8px" }} />
-              <NavTab id="sprints" label="Ops & Sprints" icon={Icons.Sprints} active={activeMain === "sprints"} set={(id) => { setActiveMain(id); setActiveSub("board"); }} />
+              <NavTab id="sprints" label={t("nav_sprints")} icon={Icons.Sprints} active={activeMain === "sprints"} set={(id) => { setActiveMain(id); setActiveSub("board"); }} />
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <SyncIndicator />
+            <button
+              onClick={toggleLang}
+              style={{ background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", color: COLORS.textMuted, cursor: "pointer", letterSpacing: "0.04em", transition: "0.2s" }}
+              onMouseEnter={e => { e.currentTarget.style.color = COLORS.text; e.currentTarget.style.borderColor = COLORS.textDim; }}
+              onMouseLeave={e => { e.currentTarget.style.color = COLORS.textMuted; e.currentTarget.style.borderColor = COLORS.border; }}
+              title={lang === "pt" ? "Switch to English" : "Mudar para Português"}
+            >{lang === "pt" ? "EN" : "PT"}</button>
             <div style={{ fontSize: 11, color: COLORS.textMuted, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>PMI 2026.1</div>
+            {googleUser ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px 4px 4px", borderRadius: 20, border: `1px solid ${COLORS.border}`, background: COLORS.surface }}>
+                {googleUser.picture
+                  ? <img src={googleUser.picture} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }} />
+                  : <div style={{ width: 22, height: 22, borderRadius: "50%", background: COLORS.highlight, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>{googleUser.initials}</div>
+                }
+                <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.text }}>{googleUser.name?.split(" ")[0]}</span>
+              </div>
+            ) : (
+              <button
+                onClick={signInWithGoogle}
+                disabled={!gsiReady}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", border: `1px solid ${COLORS.border}`, borderRadius: 20, background: "#FFF", cursor: gsiReady ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 500, color: COLORS.text, opacity: gsiReady ? 1 : 0.5, transition: "0.2s" }}
+                onMouseEnter={e => { if (gsiReady) e.currentTarget.style.borderColor = COLORS.textMuted; }}
+                onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+              >
+                <svg width="14" height="14" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                {gsiReady ? t("sign_in_google") : t("loading_sdk")}
+              </button>
+            )}
           </div>
         </header>
 
         {activeMain === "core" && (
           <div style={{ padding: "20px 40px 0", maxWidth: 1200, margin: "0 auto 16px", display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "16px", width: "100%" }}>
-            {[{id: "bmc", label: "Business Model Canvas"}, {id: "proposta", label: "Proposta de Valor"}, {id: "diferencial", label: "Diferencial Competitivo"}, {id: "pitch", label: "Pitch Studio"}].map(t => (
-              <div key={t.id} onClick={() => setActiveSub(t.id)} style={{ fontSize: 13, fontWeight: activeSub === t.id ? 600 : 500, color: activeSub === t.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
-                {t.label}
-                {activeSub === t.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
+            {[{id: "bmc", label: t("nav_bmc")}, {id: "proposta", label: t("nav_proposta")}, {id: "diferencial", label: t("nav_diferencial")}, {id: "pitch", label: t("nav_pitch")}].map(tab => (
+              <div key={tab.id} onClick={() => setActiveSub(tab.id)} style={{ fontSize: 13, fontWeight: activeSub === tab.id ? 600 : 500, color: activeSub === tab.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
+                {tab.label}
+                {activeSub === tab.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
               </div>
             ))}
           </div>
@@ -1187,14 +2399,14 @@ export default function ServLinkBackOffice() {
         {activeMain === "growth" && (
           <div style={{ padding: "20px 40px 0", maxWidth: 1200, margin: "0 auto 16px", display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "16px", width: "100%" }}>
             {[
-              {id: "branding", label: "Branding Canvas"}, 
-              {id: "roi", label: "ROI Calculator"},
-              {id: "blog", label: "Blog Engine"},
-              {id: "partners", label: "Partnerships Board"}
-            ].map(t => (
-              <div key={t.id} onClick={() => setActiveSub(t.id)} style={{ fontSize: 13, fontWeight: activeSub === t.id ? 600 : 500, color: activeSub === t.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
-                {t.label}
-                {activeSub === t.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
+              {id: "branding", label: t("nav_branding")},
+              {id: "roi", label: t("nav_roi")},
+              {id: "blog", label: t("nav_blog")},
+              {id: "partners", label: t("nav_partners")}
+            ].map(tab => (
+              <div key={tab.id} onClick={() => setActiveSub(tab.id)} style={{ fontSize: 13, fontWeight: activeSub === tab.id ? 600 : 500, color: activeSub === tab.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
+                {tab.label}
+                {activeSub === tab.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
               </div>
             ))}
           </div>
@@ -1202,10 +2414,10 @@ export default function ServLinkBackOffice() {
 
         {activeMain === "sprints" && (
           <div style={{ padding: "20px 40px 0", maxWidth: 1200, margin: "0 auto 16px", display: "flex", gap: 24, borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "16px", width: "100%" }}>
-            {[{id: "board", label: "Sprint Board"}].map(t => (
-              <div key={t.id} onClick={() => setActiveSub(t.id)} style={{ fontSize: 13, fontWeight: activeSub === t.id ? 600 : 500, color: activeSub === t.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
-                {t.label}
-                {activeSub === t.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
+            {[{id: "board", label: t("nav_sprints")}].map(tab => (
+              <div key={tab.id} onClick={() => setActiveSub(tab.id)} style={{ fontSize: 13, fontWeight: activeSub === tab.id ? 600 : 500, color: activeSub === tab.id ? COLORS.text : COLORS.textMuted, cursor: "pointer", position: "relative" }}>
+                {tab.label}
+                {activeSub === tab.id && <div style={{ position: "absolute", bottom: -17, left: 0, right: 0, height: 2, background: COLORS.text }} />}
               </div>
             ))}
           </div>

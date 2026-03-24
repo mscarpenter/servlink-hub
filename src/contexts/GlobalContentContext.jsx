@@ -59,10 +59,65 @@ const defaultData = {
   },
   scrum: {
     sprintTitle: "Sprint 01: Modelagem",
+    members: [
+      { initials: "MC", name: "Mateus Carpenter", email: "mateus@servlink.io" },
+      { initials: "EQ", name: "Equipe Técnica", email: "tech@servlink.io" }
+    ],
     tasks: [
-      { id: "SL-01", title: "Refinar Proposta de Valor no BMC", desc: "Ajustar o texto para focar na métrica de 60s.", status: "Done", priority: "High", points: 3, sprint: "Sprint 01", assignees: ["MC"], deadline: "21 Mar", subtasks: {done: 3, total: 3} },
-      { id: "SL-02", title: "Estruturar Storytelling Jurerê", desc: "Montar narrativa do Réveillon e impacto do No-Show.", status: "In Progress", priority: "Medium", points: 5, sprint: "Sprint 01", assignees: ["MC"], deadline: "23 Mar", subtasks: {done: 1, total: 4} },
-      { id: "SL-03", title: "Arquitetura Next.js/Laravel", desc: "Criar o arquivo boilerplate yaml com a stack. Configurar CI/CD básico.", status: "Backlog", priority: "Low", points: 8, sprint: "Sprint 01", assignees: ["EQ"], deadline: "28 Mar", subtasks: {done: 0, total: 5} }
+      {
+        id: "SL-01", title: "Refinar Proposta de Valor no BMC",
+        desc: "Ajustar o texto do Business Model Canvas para focar na métrica de 60s de match. Revisar o bloco Value Proposition e alinhar com o storytelling do Réveillon de Jurerê.",
+        status: "Done", priority: "High", points: 3, sprint: "Sprint 01", assignees: ["MC"], deadline: "2026-03-21",
+        subtasks: [
+          { id: "s1", text: "Revisar bloco Value Proposition", done: true },
+          { id: "s2", text: "Alinhar métricas com ROI Calculator", done: true },
+          { id: "s3", text: "Validar com stakeholders", done: true }
+        ]
+      },
+      {
+        id: "SL-02", title: "Estruturar Storytelling Jurerê",
+        desc: "Montar narrativa do Réveillon e impacto do No-Show. Criar o arco dramático completo para uso em pitch e materiais de marketing da ServLink.",
+        status: "In Progress", priority: "Medium", points: 5, sprint: "Sprint 01", assignees: ["MC"], deadline: "2026-03-23",
+        subtasks: [
+          { id: "s1", text: "Mapear timeline do evento Réveillon", done: true },
+          { id: "s2", text: "Calcular impacto financeiro do No-Show", done: false },
+          { id: "s3", text: "Redigir narrativa para pitch deck", done: false },
+          { id: "s4", text: "Validar com chef parceiro Jurerê", done: false }
+        ]
+      },
+      {
+        id: "SL-03", title: "Arquitetura Next.js/Laravel",
+        desc: "Criar o arquivo boilerplate YAML com a stack completa. Configurar CI/CD básico com GitHub Actions. Definir estrutura de pastas e padrões de código para o MVP.",
+        status: "Backlog", priority: "Low", points: 8, sprint: "Sprint 01", assignees: ["EQ"], deadline: "2026-03-28",
+        subtasks: [
+          { id: "s1", text: "Configurar repositório Next.js 14 App Router", done: false },
+          { id: "s2", text: "Setup Laravel 11 API base + Sanctum", done: false },
+          { id: "s3", text: "CI/CD pipeline com GitHub Actions", done: false },
+          { id: "s4", text: "Docker Compose para dev environment", done: false },
+          { id: "s5", text: "README e documentação inicial", done: false }
+        ]
+      },
+      {
+        id: "SL-04", title: "Branding & Identidade Visual ServLink",
+        desc: "Desenvolver a identidade visual completa da marca ServLink. Definir paleta Sand White & Slate Gray, tipografia, logotipo e brandbook. Base para todos os materiais digitais e físicos do MVP.",
+        status: "To Do", priority: "High", points: 5, sprint: "Sprint 01", assignees: ["MC"], deadline: "2026-03-30",
+        subtasks: [
+          { id: "s1", text: "Pesquisa de referências e moodboard", done: false },
+          { id: "s2", text: "Criar 3 conceitos de logotipo", done: false },
+          { id: "s3", text: "Definir paleta de cores e tipografia", done: false },
+          { id: "s4", text: "Criar brandbook PDF completo", done: false }
+        ]
+      },
+      {
+        id: "SL-05", title: "Refinar Business Model Canvas",
+        desc: "Atualizar o BMC com os aprendizados das últimas reuniões com SHRBS. Revisar Customer Segments, Revenue Streams e Cost Structure à luz dos feedbacks recebidos no último Sprint Review.",
+        status: "To Do", priority: "Medium", points: 3, sprint: "Sprint 01", assignees: ["MC"], deadline: "2026-03-27",
+        subtasks: [
+          { id: "s1", text: "Revisar Customer Segments B2B e B2C", done: false },
+          { id: "s2", text: "Atualizar Revenue Streams com Stripe Connect", done: false },
+          { id: "s3", text: "Incorporar feedback reunião SHRBS", done: false }
+        ]
+      }
     ]
   },
   blog: {
@@ -162,7 +217,6 @@ export const GlobalContentProvider = ({ children }) => {
     <GlobalContentContext.Provider value={{
       data,
       syncStatus,
-      setData,
       setData,
       updateData,
       isEditMode,
