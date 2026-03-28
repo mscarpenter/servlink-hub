@@ -31,15 +31,15 @@ const defaultData = {
     ]
   },
   proposta: {
-    title: "The Fricton Map",
-    subtitle: "A dor real da sazonalidade em Florianópolis.",
-    desc: "A informalidade dita as regras do turnover na alta estação. Enquanto a demanda escala exponencialmente de Dezembro a Março, a estrutura fixa de hospitalidade não suporta. O gatilho de dor não é apenas o No-Show, é a perda imediata da margem premium.",
+    title: "The Friction Map",
+    subtitle: "O dia em que tudo estava perfeito — até o celular vibrar.",
+    desc: "Meses de planejamento para um casamento importante. Tudo organizado, convidados chegando. No momento crítico, o gerente Marcos recebe a mensagem: dois garçons e um bartender não vão aparecer. O que acontece a seguir revela a dor real de quem opera com mão de obra informal.",
     steps: [
-      { id: "step1", time: "18:00", event: "Casa Lotada", desc: "100% de ocupação esperada no Réveillon em Jurerê Internacional.", status: "normal" },
-      { id: "jurere", time: "18:45", event: "O Choque", desc: "Chef descobre que 2 garçons e 1 auxiliar não apareceram. Nenhum aviso prévio.", status: "critical" },
-      { id: "step3", time: "19:00", event: "Caos Oculto", desc: "Grupos de WhatsApp frenéticos. 'Alguém tem indicação livre?'. Ninguém responde.", status: "warning" },
-      { id: "step4", time: "20:30", event: "Impacto Visível", desc: "Gargalo no salão. Pratos atrasam 45min. Clientes premium insatisfeitos e reviews negativos.", status: "critical" },
-      { id: "step5", time: "01:00", event: "Fechamento", desc: "Receita sub-otimizada em 25% na noite mais importante devido ao gargalo operacional.", status: "loss" },
+      { id: "step1", time: "08:00", event: "Dia do Casamento", desc: "Meses de planejamento. Tudo confirmado: equipe, cardápio e estrutura. Marcos confere os últimos detalhes na cozinha.", status: "normal" },
+      { id: "jurere", time: "14:45", event: "O Choque", desc: "Dois garçons e um bartender mandam mensagem: não vão aparecer. Sem aviso prévio, sem alternativa preparada.", status: "critical" },
+      { id: "step3", time: "15:00", event: "Caos nos Grupos", desc: "WhatsApp explode em pedidos de indicação. Respostas vagas, sem garantia nenhuma de qualidade ou pontualidade.", status: "warning" },
+      { id: "step4", time: "17:30", event: "Impacto no Evento", desc: "Serviço com atraso. Convidados percebem. Um momento único e insubstituível comprometido por falha operacional.", status: "critical" },
+      { id: "step5", time: "23:00", event: "O Outro Lado", desc: "Os freelancers que foram ajudaram sem garantia de pagamento — muitos recebem dias depois, ou não recebem.", status: "loss" },
     ]
   },
   diferencial: {

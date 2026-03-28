@@ -1032,9 +1032,7 @@ export default function ServLinkBackOffice() {
   const renderCard = (block, blockIndex) => {
     const isCore = block.type === "core";
     const isInfra = block.type === "infra";
-    const xParallax = mousePos.x * (isCore ? 15 : isInfra ? -5 : 5);
-    const yParallax = mousePos.y * (isCore ? 15 : isInfra ? -5 : 5);
-    
+
     const hasHighlight = block.items.some(it => 
       (globalHover === "jurere" && (it.id === "vp_agile" || it.id === "seg_b2b"))
     );
@@ -1050,9 +1048,8 @@ export default function ServLinkBackOffice() {
           border: hasHighlight ? `1px solid ${COLORS.highlight}` : `1px solid ${COLORS.border}`,
           boxShadow: hasHighlight ? `0 0 20px rgba(0,102,255,0.15)` : 'none'
         }}
-        animate={{ x: xParallax, y: yParallax }}
+        whileHover={{ y: -4, zIndex: 20, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        whileHover={{ scale: 1.02, zIndex: 20, boxShadow: "0 20px 40px rgba(0,0,0,0.06)" }}
         onMouseEnter={() => setGlobalHover(block.id)}
         onMouseLeave={() => setGlobalHover(null)}
       >
@@ -1112,13 +1109,11 @@ export default function ServLinkBackOffice() {
         <EditableText path="bmc.subtitle" as="p" style={{ fontSize: 13, color: COLORS.textMuted, margin: 0 }} />
       </div>
 
-      <div 
+      <div
         ref={gridRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setMousePos({ x: 0, y: 0 })}
-        style={{ 
+        style={{
           position: "relative",
-          display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gridTemplateRows: "repeat(2, 140px)", gap: 16 
+          display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gridTemplateRows: "repeat(2, 140px)", gap: 16
         }}
       >
         <LivingConnectors />
@@ -1213,55 +1208,124 @@ export default function ServLinkBackOffice() {
     </motion.div>
   );
 
+  const storytellingParagraphs = [
+    "Era o dia do casamento de uma cliente importante.",
+    "Tudo estava perfeito. Meses de planejamento, convidados chegando, um momento único prestes a acontecer.",
+    "Na cozinha, o gerente Marcos organizava os últimos detalhes… até o celular vibrar e receber duas mensagens: dois garçons e um bartender não apareceriam.",
+    "O desespero começou.",
+    "Sem alternativa, ele recorreu ao que sempre fazia: grupos no WhatsApp, pedidos de indicação, tentativas de última hora. Conseguiu ajuda — mas sem garantia nenhuma.",
+    "O resultado? Atrasos, falhas no serviço e um momento especial comprometido.",
+    "E do outro lado, o problema também existia. Freelancers trabalhavam sem garantia de pagamento, muitas vezes recebendo dias depois — ou nem recebendo.",
+    "Foi daí que surgiu uma pergunta: por que ainda é tão difícil conectar quem precisa contratar com quem quer trabalhar, de forma rápida e confiável?",
+    "Assim nasceu o ServLink.",
+    "Uma plataforma que conecta estabelecimentos a profissionais disponíveis, bem avaliados e próximos da localização.",
+    "Em menos de 60 segundos, uma vaga é publicada, aceita com um clique, o profissional faz check-in no local… e ao final do turno, recebe na hora.",
+    "Sem atraso. Sem calote. Sem incerteza.",
+    "Além disso, o sistema de reputação valoriza os melhores profissionais e aumenta a confiança para quem contrata.",
+    "O ServLink não é apenas um aplicativo. É a solução para dar eficiência ao empresário e segurança ao trabalhador.",
+    "E com isso os próximos eventos ficaram mais fáceis — sempre que precisava chamar algum freelancer, tanto para a produção do evento quanto para o dia, estava lá o ServLink para ajudar.",
+  ];
+
+  const STORYTELLING_DOC_URL = "https://docs.google.com/document/d/1UCtKA56_ZE56eOfawTQqVeWc7qRv5bP6HqEwa-GSPkg/edit?tab=t.oe4dsj61b4i2";
+
   const renderCoreProposta = () => (
-    <motion.div key="proposta" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-      <div style={{ paddingRight: 40 }}>
-        <div style={{ marginBottom: 32 }}>
-          <EditableText path="proposta.title" as="h2" style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, margin: 0, marginBottom: 4 }} />
-          <EditableText path="proposta.subtitle" as="p" style={{ fontSize: 14, color: COLORS.textMuted, margin: 0 }} />
-        </div>
-        <EditableText path="proposta.desc" as="div" style={{ fontSize: 15, color: COLORS.slateDim, lineHeight: 1.6, marginBottom: 24 }} />
-        
-        {/* Stage Manager Style Lead Gen Tracker */}
-        <div className="glass-dock" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, background: COLORS.surfaceSolid }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-            </div>
+    <motion.div key="proposta" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+
+        {/* ── Esquerda: Storytelling ── */}
+        <div style={{ paddingRight: 40 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 12 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.text }}>TELEMETRY</div>
-              <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: COLORS.textMuted }}>Match Efficiency</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.textMuted, marginBottom: 6 }}>Storytelling</div>
+              <EditableText path="proposta.title" as="h2" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, margin: 0 }} />
             </div>
+            <a
+              href={STORYTELLING_DOC_URL}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: COLORS.highlight, textDecoration: "none", fontWeight: 500, flexShrink: 0, paddingTop: 2 }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Abrir no Docs <Icons.ExternalLink />
+            </a>
           </div>
-          <div style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>
-            <div style={{ fontSize: 20, fontWeight: 500, color: COLORS.text, letterSpacing: "-0.05em" }}>60.0<span style={{ fontSize: 12, color: COLORS.textMuted }}>s</span></div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {storytellingParagraphs.map((para, i) => {
+              const isHighlight = para.startsWith("Assim nasceu") || para.startsWith("Em menos") || para.startsWith("Sem atraso");
+              const isQuestion = para.startsWith("Foi daí") || para.startsWith("O resultado");
+              return (
+                <p key={i} style={{
+                  fontSize: isHighlight ? 14 : 13,
+                  fontWeight: isHighlight ? 600 : isQuestion ? 500 : 400,
+                  color: isHighlight ? COLORS.text : isQuestion ? COLORS.text : COLORS.textMuted,
+                  lineHeight: 1.7,
+                  margin: 0,
+                  paddingBottom: i === storytellingParagraphs.length - 1 ? 0 : 12,
+                  fontStyle: isQuestion ? "italic" : "normal",
+                }}>
+                  {para}
+                </p>
+              );
+            })}
           </div>
         </div>
-      </div>
-      
-      <div style={{ position: "relative", paddingLeft: 24, borderLeft: `1px solid ${COLORS.border}` }}>
-        <EditableList
-          listPath="proposta.steps"
-          renderItem={(step, i) => {
-            const isHovered = globalHover === step.id;
-            return (
-              <div key={step.id || i} style={{ position: "relative", cursor: "pointer", display: "flex", flexDirection: "column", flex: 1, paddingBottom: 24 }}
-                   onMouseEnter={() => setGlobalHover(step.id)}
-                   onMouseLeave={() => setGlobalHover(null)}>
-                <div style={{
-                  position: "absolute", left: -30, top: 4, width: 11, height: 11, borderRadius: "50%",
-                  background: step.status === 'critical' ? COLORS.red : step.status === 'loss' ? COLORS.slate : COLORS.surfaceSolid,
-                  border: `2px solid ${step.status === 'normal' ? COLORS.textMuted : 'transparent'}`,
-                  boxShadow: isHovered && step.id === 'jurere' ? `0 0 12px ${COLORS.highlight}` : 'none'
-                }} />
-                <EditableText path={`proposta.steps.${i}.time`} style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: isHovered && step.id === 'jurere' ? COLORS.highlight : COLORS.textMuted, marginBottom: 4 }} />
-                <EditableText path={`proposta.steps.${i}.event`} style={{ fontSize: 14, fontWeight: isHovered && step.id === 'jurere' ? 600 : 500, color: isHovered && step.id === 'jurere' ? COLORS.highlight : COLORS.text, marginBottom: 4 }} />
-                <EditableText path={`proposta.steps.${i}.desc`} as="div" style={{ fontSize: 13, color: COLORS.textDim, lineHeight: 1.5 }} />
+
+        {/* ── Direita: Friction Map + Timeline ── */}
+        <div style={{ position: "relative", paddingLeft: 24, borderLeft: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column" }}>
+
+          {/* Friction Map header */}
+          <div style={{ marginBottom: 24 }}>
+            <EditableText path="proposta.title" as="h2" style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em", color: COLORS.text, margin: 0, marginBottom: 4 }} />
+            <EditableText path="proposta.subtitle" as="p" style={{ fontSize: 13, color: COLORS.textMuted, margin: 0 }} />
+          </div>
+          <EditableText path="proposta.desc" as="div" style={{ fontSize: 13, color: COLORS.slateDim, lineHeight: 1.6, marginBottom: 20 }} />
+
+          {/* Telemetry widget */}
+          <div className="glass-dock" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28, background: COLORS.surfaceSolid }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: COLORS.text, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
               </div>
-            )
-          }}
-        />
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.text }}>TELEMETRY</div>
+                <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: COLORS.textMuted }}>Match Efficiency</div>
+              </div>
+            </div>
+            <div style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>
+              <div style={{ fontSize: 20, fontWeight: 500, color: COLORS.text, letterSpacing: "-0.05em" }}>60.0<span style={{ fontSize: 12, color: COLORS.textMuted }}>s</span></div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ borderTop: `1px solid ${COLORS.border}`, marginBottom: 24 }} />
+
+          <EditableList
+            listPath="proposta.steps"
+            renderItem={(step, i) => {
+              const isHovered = globalHover === step.id;
+              return (
+                <div key={step.id || i} style={{ position: "relative", cursor: "pointer", display: "flex", flexDirection: "column", flex: 1, paddingBottom: 24 }}
+                     onMouseEnter={() => setGlobalHover(step.id)}
+                     onMouseLeave={() => setGlobalHover(null)}>
+                  <div style={{
+                    position: "absolute", left: -30, top: 4, width: 11, height: 11, borderRadius: "50%",
+                    background: step.status === 'critical' ? COLORS.red : step.status === 'loss' ? COLORS.slate : COLORS.surfaceSolid,
+                    border: `2px solid ${step.status === 'normal' ? COLORS.textMuted : 'transparent'}`,
+                    boxShadow: isHovered && step.id === 'jurere' ? `0 0 12px ${COLORS.highlight}` : 'none'
+                  }} />
+                  <EditableText path={`proposta.steps.${i}.time`} style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: isHovered && step.id === 'jurere' ? COLORS.highlight : COLORS.textMuted, marginBottom: 4 }} />
+                  <EditableText path={`proposta.steps.${i}.event`} style={{ fontSize: 14, fontWeight: isHovered && step.id === 'jurere' ? 600 : 500, color: isHovered && step.id === 'jurere' ? COLORS.highlight : COLORS.text, marginBottom: 4 }} />
+                  <EditableText path={`proposta.steps.${i}.desc`} as="div" style={{ fontSize: 13, color: COLORS.textDim, lineHeight: 1.5 }} />
+                </div>
+              )
+            }}
+          />
+        </div>
       </div>
+
     </motion.div>
   );
 
